@@ -6,5 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
     "jsonschema",
-    "pytest"
+    "pytest",
+    "beautifulsoup4",
+    "PyYAML"
 ]
