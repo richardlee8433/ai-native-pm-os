@@ -5,8 +5,9 @@ import json
 from orchestrator.cli import main
 
 
-def test_cli_signal_action_writeback_flow(tmp_path, capsys) -> None:
+def test_cli_signal_action_writeback_flow(tmp_path, capsys, monkeypatch) -> None:
     data_dir = tmp_path / "data"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
 
     rc = main([
         "--data-dir",
@@ -40,3 +41,4 @@ def test_cli_signal_action_writeback_flow(tmp_path, capsys) -> None:
     assert rc == 0
     lti_payload = json.loads(capsys.readouterr().out)
     assert lti_payload["id"].startswith("LTI-")
+    assert lti_payload["written_path"].endswith(".md")

@@ -1706,3 +1706,17 @@ Edit `ingest/sources.yaml` and add a new source entry with:
   - `rss`: `url`
   - `arxiv`: `base_url`, `search_query`, sorting fields
   - `html_list`: `url`, `link_selector`, optional `include_pattern`
+
+---
+
+## Vault Writeback Configuration (Layer 5)
+
+`writeback apply` now persists `LTI_NODE` artifacts into the Obsidian vault as Markdown.
+
+- Environment variable: `PM_OS_VAULT_ROOT`
+  - If set, Layer 5 writeback stores LTI notes under that vault root.
+  - If unset, default vault root is `.vault_test`.
+- Folder convention for LTI writeback:
+  - `<vault_root>/02_LTI/<LTI_ID>.md`
+  - Example: `.vault_test/02_LTI/LTI-1.0.md`
+- Files are written atomically (temp file + replace) and overwritten on re-apply for the same action/LTI id.

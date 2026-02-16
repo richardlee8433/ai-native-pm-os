@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import datetime as dt
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+
+import os
 
 from pm_os_contracts.models import ACTION_TASK, LTI_NODE, SIGNAL
 
 from orchestrator.storage import JSONLStorage
+from orchestrator.vault_ops import write_lti_markdown
 
 
 class Orchestrator:
@@ -18,6 +21,9 @@ class Orchestrator:
     ) -> None:
         self.data_dir = data_dir
         self.now_provider = now_provider or (lambda: dt.datetime.now(tz=dt.timezone.utc))
+
+        vault_root = os.getenv("PM_OS_VAULT_ROOT", ".vault_test")
+        self.vault_root = Path(vault_root)
 
         self.signals = JSONLStorage(self.data_dir / "signals.jsonl")
         self.tasks = JSONLStorage(self.data_dir / "weekly_tasks.jsonl")
@@ -101,9 +107,9 @@ class Orchestrator:
 
         return task
 
-    def apply_writeback(self, *, action_id: str | None = None) -> LTI_NODE:
+    def apply_writeback(self, *, action_id: str | None = None) -> dict[str, Any]:
         task = self._resolve_task(action_id)
-        lti_id = self._next_lti_id()
+        lti_id = self._existing_lti_id_for_action(task.id) or self._next_lti_id()
 
         lti_node = LTI_NODE(
             id=lti_id,
@@ -115,6 +121,12 @@ class Orchestrator:
             published_at=self.now_provider().date(),
         )
         self.lti_nodes.append(lti_node.to_dict())
+        written_path = write_lti_markdown(
+            self.vault_root,
+            lti_node,
+            task.id,
+            updated_at=self.now_provider().replace(microsecond=0).isoformat(),
+        )
         self.writebacks.append(
             {
                 "action_id": task.id,
@@ -123,7 +135,18 @@ class Orchestrator:
                 "applied_at": self.now_provider().isoformat(),
             }
         )
-        return lti_node
+        payload = lti_node.to_dict()
+        payload["written_path"] = str(written_path)
+        return payload
+
+    def _existing_lti_id_for_action(self, action_id: str) -> str | None:
+        for writeback in reversed(self.writebacks.read_all()):
+            if writeback.get("action_id") != action_id:
+                continue
+            lti_id = writeback.get("lti_id")
+            if isinstance(lti_id, str):
+                return lti_id
+        return None
 
     def _select_signal(self, signal_id: str | None) -> SIGNAL:
         signals = [SIGNAL.from_dict(row) for row in self.signals.read_all()]
