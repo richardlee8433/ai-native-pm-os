@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "type", "goal", "deliverables"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^ACT-[0-9]{8}-[0-9]{3}$"},
+    "type": {
+      "type": "string",
+      "enum": ["tech_prototype", "strategic_design", "content_creation", "task_tracking"]
+    },
+    "goal": {"type": "string"},
+    "context": {"type": "string"},
+    "deliverables": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "reflection_prompts": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "engine": {
+      "type": "string",
+      "enum": ["aispm_agent", "ai_pmo", "mentorflow"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "completed", "blocked"]
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "due_date": {"type": "string", "format": "date"}
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["lpl_id", "captured_at"],
+  "properties": {
+    "lpl_id": {"type": "string"},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "engagement_rate": {"type": "number"},
+    "comment_quality": {
+      "type": "object",
+      "properties": {
+        "avg_sentiment": {"type": "number", "minimum": -1, "maximum": 1},
+        "avg_depth_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "professional_ratio": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "share_velocity": {
+      "type": "number",
+      "description": "Shares per hour in first 24h"
+    },
+    "audience_breakdown": {
+      "type": "object",
+      "properties": {
+        "by_role": {"type": "object"},
+        "by_industry": {"type": "object"}
+      }
+    },
+    "composite_echo_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

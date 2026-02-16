@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "title", "status"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^RTI-[0-9]\\.[0-9]+$"},
+    "title": {"type": "string"},
+    "category": {"type": "string"},
+    "status": {
+      "type": "string",
+      "enum": ["active", "under_review", "deprecated"]
+    },
+    "confidence_level": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5
+    },
+    "linked_evidence": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "linked_lti": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "linked_cos_patterns": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "revision_trigger_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "last_validated": {"type": "string", "format": "date"}
+  }
+}

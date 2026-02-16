@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "source", "type", "timestamp"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^SIG-[0-9]{8}-[0-9]{3}$"},
+    "source": {"type": "string"},
+    "type": {
+      "type": "string",
+      "enum": ["capability", "research", "governance", "market", "ecosystem"]
+    },
+    "timestamp": {"type": "string", "format": "date-time"},
+    "title": {"type": "string"},
+    "content": {"type": "string"},
+    "url": {"type": "string", "format": "uri"},
+    "priority_score": {"type": "number", "minimum": 0, "maximum": 1},
+    "impact_area": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "linked_action_id": {"type": "string"}
+  }
+}
