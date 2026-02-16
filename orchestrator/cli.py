@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 from pathlib import Path
 
 from ingest.normalize import MIN_PRIORITY_THRESHOLD, normalize_item_to_signal
 from ingest.registry import get_fetcher, load_sources
 from ingest.store import append_signals_with_results
 from ingest.validation import validate_signal_contract
-from kb_manager.signals_ops import SignalVaultWriter
+from orchestrator.vault_ops import write_signal_markdown
 from orchestrator.workflow import Orchestrator
 
 
@@ -122,16 +123,13 @@ def _run_ingest(args: argparse.Namespace) -> int:
     }
     print(json.dumps(report))
 
-    if args.vault_root:
-        writer = SignalVaultWriter(Path(args.vault_root))
-        writeback_summary = writer.write_signals(written_signals)
-        print(
-            "vault_writeback: "
-            f"written={writeback_summary['written']} "
-            f"skipped_existing={writeback_summary['skipped_existing']} "
-            f"skipped_dupe={writeback_summary['skipped_dupe']} "
-            f"index={writer.index_path}"
-        )
+    vault_root = Path(args.vault_root or os.getenv("PM_OS_VAULT_ROOT", ".vault_test"))
+    markdown_written = 0
+    for signal in written_signals:
+        write_signal_markdown(vault_root, signal)
+        markdown_written += 1
+
+    print(f"vault_writeback: written={markdown_written} root={vault_root}")
 
     return 0
 
