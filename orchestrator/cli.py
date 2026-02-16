@@ -7,8 +7,9 @@ from pathlib import Path
 
 from ingest.normalize import MIN_PRIORITY_THRESHOLD, normalize_item_to_signal
 from ingest.registry import get_fetcher, load_sources
-from ingest.store import append_signals
+from ingest.store import append_signals_with_results
 from ingest.validation import validate_signal_contract
+from kb_manager.signals_ops import SignalVaultWriter
 from orchestrator.workflow import Orchestrator
 
 
@@ -55,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--limit-per-source", type=int, default=5)
     ingest.add_argument("--out", default="orchestrator/data/signals.jsonl")
     ingest.add_argument("--threshold", type=float, default=MIN_PRIORITY_THRESHOLD)
+    ingest.add_argument("--vault-root")
 
     action_parser = subparsers.add_parser("action")
     action_sub = action_parser.add_subparsers(dest="action_command", required=True)
@@ -108,7 +110,8 @@ def _run_ingest(args: argparse.Namespace) -> int:
                 continue
             signals.append(signal)
 
-    written, skipped_dupes = append_signals(args.out, signals)
+    written_signals, skipped_dupes = append_signals_with_results(args.out, signals)
+    written = len(written_signals)
     report = {
         "new_count": written,
         "skipped_duplicates": skipped_dupes,
@@ -118,6 +121,18 @@ def _run_ingest(args: argparse.Namespace) -> int:
         "failures": failures,
     }
     print(json.dumps(report))
+
+    if args.vault_root:
+        writer = SignalVaultWriter(Path(args.vault_root))
+        writeback_summary = writer.write_signals(written_signals)
+        print(
+            "vault_writeback: "
+            f"written={writeback_summary['written']} "
+            f"skipped_existing={writeback_summary['skipped_existing']} "
+            f"skipped_dupe={writeback_summary['skipped_dupe']} "
+            f"index={writer.index_path}"
+        )
+
     return 0
 
 

@@ -39,13 +39,23 @@ def _write_index_atomic(index_path: Path, index_data: dict[str, set[str]]) -> No
 
 
 def append_signals(path: str | Path, signals: list[SIGNAL], *, index_path: str | Path | None = None) -> tuple[int, int]:
+    written_signals, skipped = append_signals_with_results(path, signals, index_path=index_path)
+    return len(written_signals), skipped
+
+
+def append_signals_with_results(
+    path: str | Path,
+    signals: list[SIGNAL],
+    *,
+    index_path: str | Path | None = None,
+) -> tuple[list[SIGNAL], int]:
     data_path = Path(path)
     idx_path = Path(index_path) if index_path else data_path.parent / "signals_index.json"
     data_path.parent.mkdir(parents=True, exist_ok=True)
 
     index_data = _load_index(idx_path)
 
-    written = 0
+    written_signals: list[SIGNAL] = []
     skipped = 0
     with data_path.open("a", encoding="utf-8") as handle:
         for signal in signals:
@@ -62,11 +72,11 @@ def append_signals(path: str | Path, signals: list[SIGNAL], *, index_path: str |
                 continue
 
             handle.write(json.dumps(signal_payload) + "\n")
-            written += 1
+            written_signals.append(signal)
 
             if url:
                 index_data["urls"].add(url)
             index_data["fallback_hashes"].add(fallback)
 
     _write_index_atomic(idx_path, index_data)
-    return written, skipped
+    return written_signals, skipped
