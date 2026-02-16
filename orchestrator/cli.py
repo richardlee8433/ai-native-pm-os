@@ -185,8 +185,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "writeback" and args.writeback_command == "apply":
-        lti_node = orchestrator.apply_writeback(action_id=args.action_id)
-        print(lti_node.to_json())
+        payload = orchestrator.apply_writeback(action_id=args.action_id)
+        print(json.dumps(payload))
         return 0
 
     parser.error("Unknown command")
