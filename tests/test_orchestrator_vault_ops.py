@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from orchestrator.vault_ops import write_lti_markdown, write_signal_markdown
+from orchestrator.vault_ops import resolve_vault_root, write_lti_markdown, write_signal_markdown
 from pm_os_contracts.models import LTI_NODE, SIGNAL
 
 
@@ -56,5 +56,20 @@ def test_write_lti_markdown_formats_yaml_lists_and_sanitizes_summary(tmp_path) -
     assert '- RTI-1.1' in text
     assert "tags:" in text
     assert "summary_sanitized: true" in text
-    assert "f(x)" not in text
+    assert "- ACT-20260216-001" in text
+    assert "- agents" in text
+    assert "f(x)" in text
     assert "textbf" not in text
+    assert "$" not in text
+
+
+def test_resolve_vault_root_precedence(tmp_path, monkeypatch) -> None:
+    cli_root = tmp_path / "cli-vault"
+    env_root = tmp_path / "env-vault"
+
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(env_root))
+    assert resolve_vault_root(str(cli_root)) == cli_root
+    assert resolve_vault_root(None) == env_root
+
+    monkeypatch.delenv("PM_OS_VAULT_ROOT")
+    assert resolve_vault_root(None).as_posix() == ".vault_test"

@@ -11,6 +11,16 @@ from pm_os_contracts.models import LTI_NODE, SIGNAL
 
 _LATEX_INLINE_PATTERN = re.compile(r"\$(.*?)\$|\\\((.*?)\\\)|\\\[(.*?)\\\]", re.DOTALL)
 _LATEX_COMMAND_PATTERN = re.compile(r"\\[a-zA-Z]+\*?(?:\{[^{}]*\})?")
+_LATEX_TEXTBF_PATTERN = re.compile(r"\\textbf\{([^{}]*)\}")
+
+
+def resolve_vault_root(cli_override: str | None) -> Path:
+    if cli_override:
+        return Path(cli_override)
+    env_root = os.getenv("PM_OS_VAULT_ROOT")
+    if env_root:
+        return Path(env_root)
+    return Path(".vault_test")
 
 
 def _yaml_scalar(value: Any) -> str:
@@ -46,7 +56,12 @@ def _normalize_datetime(value: datetime | str | None) -> str:
 def _clean_markdown_text(raw: str | None) -> str:
     if not raw:
         return ""
-    without_math = _LATEX_INLINE_PATTERN.sub(" ", raw)
+    without_textbf = _LATEX_TEXTBF_PATTERN.sub(r"\1", raw)
+
+    def _inline_repl(match: re.Match[str]) -> str:
+        return next((group for group in match.groups() if group is not None), "")
+
+    without_math = _LATEX_INLINE_PATTERN.sub(_inline_repl, without_textbf)
     without_commands = _LATEX_COMMAND_PATTERN.sub(" ", without_math)
     return " ".join(without_commands.split())
 
@@ -58,35 +73,36 @@ def _excerpt(content: str | None, *, limit: int = 500) -> str:
     return cleaned[:limit].rstrip() + "…"
 
 
-def write_signal_markdown(vault_root: Path, signal: SIGNAL) -> Path:
+def write_signal_markdown(vault_root: Path, signal: dict[str, Any] | SIGNAL) -> Path:
     """Write a SIGNAL contract as an Obsidian note under 98_Signals."""
-    target = vault_root / "98_Signals" / f"{signal.id}.md"
+    signal_model = _coerce_signal(signal)
+    target = vault_root / "98_Signals" / f"{signal_model.id}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
 
     ingested_at = _normalize_datetime(datetime.now(tz=timezone.utc))
-    timestamp = _normalize_datetime(signal.timestamp)
-    impact_areas = signal.impact_area or []
+    timestamp = _normalize_datetime(signal_model.timestamp)
+    impact_areas = signal_model.impact_area or []
     impact_body = "\n".join(f"- {area}" for area in impact_areas) if impact_areas else "- none"
 
     content = (
         "---\n"
-        f"id: {_yaml_scalar(signal.id)}\n"
-        f"source: {_yaml_scalar(signal.source)}\n"
-        f"type: {_yaml_scalar(signal.type)}\n"
+        f"id: {_yaml_scalar(signal_model.id)}\n"
+        f"source: {_yaml_scalar(signal_model.source)}\n"
+        f"type: {_yaml_scalar(signal_model.type)}\n"
         f"timestamp: {_yaml_scalar(timestamp)}\n"
-        f"url: {_yaml_scalar(signal.url)}\n"
-        f"priority_score: {_yaml_scalar(signal.priority_score)}\n"
+        f"url: {_yaml_scalar(signal_model.url)}\n"
+        f"priority_score: {_yaml_scalar(signal_model.priority_score)}\n"
         "impact_area:\n"
         f"{_yaml_list(impact_areas)}\n"
         f"ingested_at: {_yaml_scalar(ingested_at)}\n"
         "---\n\n"
-        f"# {signal.title or signal.id}\n\n"
+        f"# {signal_model.title or signal_model.id}\n\n"
         "## Source\n"
-        f"{signal.url or ''}\n\n"
+        f"{signal_model.url or ''}\n\n"
         "## Impact Areas\n"
         f"{impact_body}\n\n"
         "## Excerpt\n"
-        f"{_excerpt(signal.content)}\n"
+        f"{_excerpt(signal_model.content)}\n"
     )
 
     with NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent, delete=False) as tmp:
@@ -99,7 +115,22 @@ def write_signal_markdown(vault_root: Path, signal: SIGNAL) -> Path:
     return target
 
 
-def write_lti_markdown(vault_root: Path, node: LTI_NODE, source_task_id: str, *, updated_at: str) -> Path:
+def _coerce_signal(signal: dict[str, Any] | SIGNAL) -> SIGNAL:
+    if isinstance(signal, SIGNAL):
+        return signal
+    return SIGNAL.model_validate(signal)
+
+
+def write_lti_markdown(
+    vault_root: Path,
+    node: LTI_NODE,
+    source_task_id: str,
+    *,
+    updated_at: str,
+    source_signal_id: str | None = None,
+    source_url: str | None = None,
+    impact_area: list[str] | None = None,
+) -> Path:
     """Write an LTI node as Obsidian-friendly markdown and return the file path."""
     target = vault_root / "02_LTI" / f"{node.id}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -122,6 +153,10 @@ def write_lti_markdown(vault_root: Path, node: LTI_NODE, source_task_id: str, *,
         "tags:\n"
         f"{_yaml_list(node.tags or [])}\n"
         f"source_task_id: {_yaml_scalar(source_task_id)}\n"
+        f"source_signal_id: {_yaml_scalar(source_signal_id)}\n"
+        f"source_url: {_yaml_scalar(source_url)}\n"
+        "impact_area:\n"
+        f"{_yaml_list(impact_area or [])}\n"
         f"updated_at: {_yaml_scalar(_normalize_datetime(updated_at))}\n"
         "summary_sanitized: true\n"
         "---\n\n"

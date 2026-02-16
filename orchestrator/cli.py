@@ -3,14 +3,13 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import os
 from pathlib import Path
 
 from ingest.normalize import MIN_PRIORITY_THRESHOLD, normalize_item_to_signal
 from ingest.registry import get_fetcher, load_sources
 from ingest.store import append_signals_with_results
 from ingest.validation import validate_signal_contract
-from orchestrator.vault_ops import write_signal_markdown
+from orchestrator.vault_ops import resolve_vault_root, write_signal_markdown
 from orchestrator.workflow import Orchestrator
 
 
@@ -58,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--out", default="orchestrator/data/signals.jsonl")
     ingest.add_argument("--threshold", type=float, default=MIN_PRIORITY_THRESHOLD)
     ingest.add_argument("--vault-root")
+    ingest.add_argument(
+        "--writeback-signals",
+        action="store_true",
+        help="Write newly ingested signals as Obsidian notes under 98_Signals",
+    )
 
     action_parser = subparsers.add_parser("action")
     action_sub = action_parser.add_subparsers(dest="action_command", required=True)
@@ -113,6 +117,13 @@ def _run_ingest(args: argparse.Namespace) -> int:
 
     written_signals, skipped_dupes = append_signals_with_results(args.out, signals)
     written = len(written_signals)
+
+    vault_paths: list[str] = []
+    if args.writeback_signals:
+        vault_root = resolve_vault_root(args.vault_root)
+        for signal in written_signals:
+            vault_paths.append(str(write_signal_markdown(vault_root, signal)))
+
     report = {
         "new_count": written,
         "skipped_duplicates": skipped_dupes,
@@ -120,16 +131,10 @@ def _run_ingest(args: argparse.Namespace) -> int:
         "failed_count": len(failures),
         "out": str(Path(args.out)),
         "failures": failures,
+        "vault_written": len(vault_paths),
+        "vault_paths": vault_paths[:10],
     }
     print(json.dumps(report))
-
-    vault_root = Path(args.vault_root or os.getenv("PM_OS_VAULT_ROOT", ".vault_test"))
-    markdown_written = 0
-    for signal in written_signals:
-        write_signal_markdown(vault_root, signal)
-        markdown_written += 1
-
-    print(f"vault_writeback: written={markdown_written} root={vault_root}")
 
     return 0
 

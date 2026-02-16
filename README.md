@@ -1720,3 +1720,14 @@ Edit `ingest/sources.yaml` and add a new source entry with:
   - `<vault_root>/02_LTI/<LTI_ID>.md`
   - Example: `.vault_test/02_LTI/LTI-1.0.md`
 - Files are written atomically (temp file + replace) and overwritten on re-apply for the same action/LTI id.
+
+## Weekly Task Scheduler Snippet (Layer 1 Intake)
+
+Use Windows Task Scheduler to run weekly Layer-1 signal intake on **Monday 09:10**.
+
+```powershell
+$env:PM_OS_VAULT_ROOT="G:\My Drive\AI Native PM\AI Native PM\"
+python -m orchestrator.cli ingest --since-days 7 --limit-per-source 5 --threshold 0 --writeback-signals
+```
+
+This writes newly ingested signal notes to `<PM_OS_VAULT_ROOT>\98_Signals\SIG-*.md`.
