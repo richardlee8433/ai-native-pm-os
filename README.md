@@ -1677,15 +1677,26 @@ Layer 1 intake fetches external sources (RSS, arXiv Atom API, and HTML listing p
 python -m orchestrator.cli ingest --since-days 7 --limit-per-source 5
 ```
 
+### Layer 1 Intake Writeback
+
+```bash
+python -m orchestrator.cli ingest --since-days 7 --limit-per-source 5 --vault-root <YourObsidianVaultRoot>
+```
+
 Optional flags:
 - `--sources ingest/sources.yaml` (source registry path)
 - `--out orchestrator/data/signals.jsonl` (append-only output file)
 - `--threshold 0.6` (minimum priority score)
+- `--vault-root <path>` (optional Obsidian vault writeback target)
 
 ### Output files
 
-- `orchestrator/data/signals.jsonl`: append-only SIGNAL events
-- `orchestrator/data/signals_index.json`: dedupe index for URLs/fallback hashes
+- `orchestrator/data/signals.jsonl`: append-only SIGNAL events (unchanged canonical intake store)
+- `orchestrator/data/signals_index.json`: dedupe index for URLs/fallback hashes in intake storage
+- `<vault_root>/98_Signals/YYYY/MM/<SIG-ID>.md`: time-based Obsidian note writeback for newly accepted signals
+- `<vault_root>/00_Index/signal_url_index.json`: URL/fingerprint dedupe index for vault writeback
+
+Signals are stored in time-based folders under `98_Signals`; graph-style classification remains metadata-driven via frontmatter fields rather than folder taxonomy.
 
 ### Add a source
 
