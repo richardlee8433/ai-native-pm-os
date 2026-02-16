@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>OpenAI News</title>
+    <item>
+      <title>OpenAI launches new agent SDK</title>
+      <link>https://openai.com/news/agent-sdk</link>
+      <pubDate>Mon, 10 Feb 2026 10:00:00 GMT</pubDate>
+      <description>New tooling for agent development and evaluation.</description>
+    </item>
+    <item>
+      <title>Reasoning model update</title>
+      <link>https://openai.com/news/reasoning-model</link>
+      <pubDate>Sun, 09 Feb 2026 10:00:00 GMT</pubDate>
+      <description>Improved reasoning and multimodal features.</description>
+    </item>
+  </channel>
+</rss>

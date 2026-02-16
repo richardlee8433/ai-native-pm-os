@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>arXiv Query Results</title>
+  <entry>
+    <id>http://arxiv.org/abs/2602.00001v1</id>
+    <updated>2026-02-11T01:00:00Z</updated>
+    <published>2026-02-10T22:00:00Z</published>
+    <title>Agentic Evaluation for Multimodal Systems</title>
+    <summary>We present a benchmark for agent evaluation and safety.</summary>
+    <author><name>Jane Doe</name></author>
+    <category term="cs.AI"/>
+  </entry>
+</feed>

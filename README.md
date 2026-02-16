@@ -1666,3 +1666,32 @@ The system is designed to **compound judgment quality** through systematic execu
 **Last Updated:** 2026-02-16  
 **Maintainer:** Richard Lee  
 **Status:** Ready for Review
+
+## Layer 1 Intake
+
+Layer 1 intake fetches external sources (RSS, arXiv Atom API, and HTML listing pages), normalizes entries into `SIGNAL` contracts, validates each signal, deduplicates, and appends to JSONL storage.
+
+### Run intake
+
+```bash
+python -m orchestrator.cli ingest --since-days 7 --limit-per-source 5
+```
+
+Optional flags:
+- `--sources ingest/sources.yaml` (source registry path)
+- `--out orchestrator/data/signals.jsonl` (append-only output file)
+- `--threshold 0.6` (minimum priority score)
+
+### Output files
+
+- `orchestrator/data/signals.jsonl`: append-only SIGNAL events
+- `orchestrator/data/signals_index.json`: dedupe index for URLs/fallback hashes
+
+### Add a source
+
+Edit `ingest/sources.yaml` and add a new source entry with:
+- `id`, `name`, `type`, `signal_type`, `weight`
+- Type-specific settings:
+  - `rss`: `url`
+  - `arxiv`: `base_url`, `search_query`, sorting fields
+  - `html_list`: `url`, `link_selector`, optional `include_pattern`
