@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest = subparsers.add_parser("ingest", help="Run Layer 1 intake from source registry")
     ingest.add_argument("--sources", default="ingest/sources.yaml")
     ingest.add_argument("--since-days", type=int, default=7)
-    ingest.add_argument("--limit-per-source", type=int, default=5)
+    ingest.add_argument("--limit-per-source", type=int, default=10)
     ingest.add_argument("--out", default="orchestrator/data/signals.jsonl")
     ingest.add_argument("--threshold", type=float, default=MIN_PRIORITY_THRESHOLD)
     ingest.add_argument("--vault-root")

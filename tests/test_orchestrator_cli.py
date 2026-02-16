@@ -141,3 +141,4 @@ def test_ingest_help_includes_writeback_flag(capsys) -> None:
 
     help_text = capsys.readouterr().out
     assert "--writeback-signals" in help_text
+    assert "--vault-root" in help_text

@@ -1,45 +1,28 @@
 - id: openai_news
-  name: OpenAI News
+  name: "OpenAI News"
   type: rss
-  url: https://openai.com/news/rss.xml
+  url: "https://openai.com/news/rss.xml"
+  priority_weight: 1.0
+  signal_type: ecosystem
+
+- id: hn_rss
+  name: "Hacker News"
+  type: rss
+  url: "https://news.ycombinator.com/rss"
+  priority_weight: 0.7
+  signal_type: ecosystem
+
+- id: anthropic_news_proxy
+  name: "Anthropic News (md_proxy via Jina Reader)"
+  type: md_proxy
+  url: "https://r.jina.ai/https://www.anthropic.com/news"
+  priority_weight: 0.9
   signal_type: capability
-  weight: 0.9
-
-- id: anthropic_news
-  name: Anthropic Newsroom
-  type: html_list
-  url: https://www.anthropic.com/news
-  link_selector: "a[href^='/news/']"
-  title_selector: "h1, h2, h3"
-  date_hint: true
-  signal_type: capability
-  weight: 0.9
-
-- id: deepmind_news
-  name: Google DeepMind News
-  type: html_list
-  url: https://deepmind.google/blog/
-  link_selector: "a[href]"
-  include_pattern: "/discover/blog|/blog/|blog.google"
-  signal_type: research
-  weight: 0.8
-
-- id: meta_ai_blog
-  name: Meta AI Blog
-  type: html_list
-  url: https://ai.meta.com/blog/
-  link_selector: "a[href]"
-  include_pattern: "/blog/"
-  signal_type: research
-  weight: 0.7
 
 - id: arxiv_ai
-  name: arXiv AI
-  type: arxiv
-  base_url: http://export.arxiv.org/api/query
-  search_query: "(cat:cs.AI OR cat:cs.CL OR cat:cs.LG) AND (all:agent OR all:reasoning OR all:alignment OR all:eval OR all:multimodal)"
-  sortBy: submittedDate
-  sortOrder: descending
-  max_results: 10
+  name: "arXiv AI Research"
+  type: arxiv_api
+  url: "http://export.arxiv.org/api/query"
+  query: "cat:cs.AI+OR+cat:cs.LG"
+  priority_weight: 0.7
   signal_type: research
-  weight: 0.7
