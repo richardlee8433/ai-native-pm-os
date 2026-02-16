@@ -11,6 +11,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback path
 
 from ingest.fetchers.arxiv_fetcher import ArxivFetcher
 from ingest.fetchers.html_list_fetcher import HTMLListFetcher
+from ingest.fetchers.md_proxy_fetcher import MDProxyFetcher
 from ingest.fetchers.rss_fetcher import RSSFetcher
 
 
@@ -32,10 +33,20 @@ class SourceConfig:
     sortBy: str | None = None
     sortOrder: str | None = None
     max_results: int | None = None
+    query: str | None = None
+    priority_weight: float | None = None
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "SourceConfig":
-        return cls(**payload)
+        normalized = dict(payload)
+
+        if normalized.get("priority_weight") is not None and normalized.get("weight") is None:
+            normalized["weight"] = normalized["priority_weight"]
+
+        if normalized.get("query") is not None and normalized.get("search_query") is None:
+            normalized["search_query"] = normalized["query"]
+
+        return cls(**normalized)
 
 
 def _parse_scalar(value: str) -> Any:
@@ -95,8 +106,10 @@ def load_sources(path: str | Path) -> list[SourceConfig]:
 def get_fetcher(source_type: str):
     if source_type == "rss":
         return RSSFetcher()
-    if source_type == "arxiv":
+    if source_type in {"arxiv", "arxiv_api"}:
         return ArxivFetcher()
     if source_type == "html_list":
         return HTMLListFetcher()
+    if source_type == "md_proxy":
+        return MDProxyFetcher()
     raise ValueError(f"Unsupported source type: {source_type}")
