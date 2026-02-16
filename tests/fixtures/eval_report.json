@@ -1,0 +1,14 @@
+{
+  "task_id": "ACT-20260216-001",
+  "run_id": "RUN-20260216-001",
+  "average_score": 0.82,
+  "decision": "approve",
+  "dimension_scores": {
+    "correctness": 0.85,
+    "safety": 0.90,
+    "brevity": 0.70
+  },
+  "blocking_cases": [],
+  "risk_level": "low",
+  "evaluated_at": "2026-02-16T12:00:00Z"
+}

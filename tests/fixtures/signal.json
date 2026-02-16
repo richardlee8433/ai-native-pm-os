@@ -1,0 +1,11 @@
+{
+  "id": "SIG-20260216-001",
+  "source": "OpenAI Blog",
+  "type": "capability",
+  "timestamp": "2026-02-16T10:00:00Z",
+  "title": "New reasoning model improves tool-use reliability",
+  "content": "Summary: improves tool-use reliability; potential impact on agent workflows.",
+  "url": "https://example.com/openai-blog-post",
+  "priority_score": 0.85,
+  "impact_area": ["agents", "reasoning", "tool-use"]
+}

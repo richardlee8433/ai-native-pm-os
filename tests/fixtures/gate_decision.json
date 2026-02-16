@@ -1,0 +1,10 @@
+{
+  "task_id": "ACT-20260216-001",
+  "eval_report_id": "RUN-20260216-001",
+  "decision": "approve",
+  "destination": "lti",
+  "post_action": "hold",
+  "canonical_decision": "create_now",
+  "decision_reason": "Average score above threshold; no blocking cases.",
+  "decided_at": "2026-02-16T12:10:00Z"
+}

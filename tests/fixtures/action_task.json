@@ -1,0 +1,19 @@
+{
+  "id": "ACT-20260216-001",
+  "week": "2026-W07",
+  "type": "tech_prototype",
+  "goal": "Evaluate tool-use reliability on 5 failure cases.",
+  "steps": [
+    "Select 5 recent bad cases",
+    "Define rubric: correctness, safety, brevity",
+    "Run judge model scoring + manual calibration"
+  ],
+  "deliverables": [
+    "eval_table.md",
+    "notes.md"
+  ],
+  "reflection_questions": [
+    "Did judge and manual scoring align?",
+    "Should this become a regression test?"
+  ]
+}
