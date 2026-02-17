@@ -9,8 +9,14 @@ from ingest.normalize import MIN_PRIORITY_THRESHOLD, normalize_item_to_signal
 from ingest.registry import get_fetcher, load_sources
 from ingest.store import append_signals_with_results
 from ingest.validation import validate_signal_contract
-from orchestrator.vault_ops import resolve_vault_root, write_signal_markdown
+from orchestrator.vault_ops import (
+    current_week_id,
+    resolve_vault_root,
+    write_signal_markdown,
+    write_weekly_review_from_signals,
+)
 from orchestrator.workflow import Orchestrator
+from pm_os_contracts.models import SIGNAL
 
 
 def _parse_iso_datetime(value: str) -> dt.datetime:
@@ -60,8 +66,13 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument(
         "--writeback-signals",
         action="store_true",
-        help="Write newly ingested signals as Obsidian notes under 98_Signals",
+        help="Write newly ingested signals as Obsidian notes under 95_Signals",
     )
+
+    weekly = subparsers.add_parser("weekly", help="Generate Layer-2 weekly shortlist note")
+    weekly.add_argument("--vault-root")
+    weekly.add_argument("--week-id", default=None, help="Format: YYYY-Wxx")
+    weekly.add_argument("--limit", type=int, default=10)
 
     action_parser = subparsers.add_parser("action")
     action_sub = action_parser.add_subparsers(dest="action_command", required=True)
@@ -74,6 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
     writeback_sub = writeback_parser.add_subparsers(dest="writeback_command", required=True)
     writeback_apply = writeback_sub.add_parser("apply")
     writeback_apply.add_argument("--action-id")
+    writeback_apply.add_argument("--artifact-kind", default="lti", choices=["lti", "rti"])
+    writeback_apply.add_argument("--human-approved", action="store_true", default=False)
+    writeback_apply.add_argument("--publish-intent")
+    writeback_apply.add_argument("--rti-intent")
 
     return parser
 
@@ -139,6 +154,16 @@ def _run_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_weekly_review(args: argparse.Namespace, orchestrator: Orchestrator) -> int:
+    week_id = args.week_id or current_week_id()
+    vault_root = resolve_vault_root(args.vault_root)
+    rows = [SIGNAL.from_dict(row) for row in orchestrator.signals.read_all()]
+    rows.sort(key=lambda item: (item.priority_score or 0.0, item.timestamp), reverse=True)
+    path = write_weekly_review_from_signals(vault_root, week_id, rows[: args.limit], limit=args.limit)
+    print(json.dumps({"week_id": week_id, "written_path": str(path)}))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -161,6 +186,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ingest":
         return _run_ingest(args)
+
+    if args.command == "weekly":
+        return _run_weekly_review(args, orchestrator)
 
     if args.command == "signal" and args.signal_command == "add":
         timestamp = _parse_iso_datetime(args.timestamp) if args.timestamp else None
@@ -188,7 +216,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "writeback" and args.writeback_command == "apply":
-        payload = orchestrator.apply_writeback(action_id=args.action_id)
+        payload = orchestrator.apply_writeback(
+            action_id=args.action_id,
+            artifact_kind=args.artifact_kind,
+            human_approved=args.human_approved,
+            publish_intent=args.publish_intent,
+            rti_intent=args.rti_intent,
+        )
         print(json.dumps(payload))
         return 0
 

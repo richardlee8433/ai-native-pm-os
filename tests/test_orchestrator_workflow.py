@@ -35,7 +35,7 @@ def test_manual_workflow_signal_action_writeback(tmp_path, monkeypatch) -> None:
     lti_payload = orchestrator.apply_writeback()
     assert lti_payload["id"] == "LTI-1.0"
     assert lti_payload["linked_evidence"] == [task.id]
-    assert lti_payload["written_path"].endswith("02_LTI/LTI-1.0.md")
+    assert lti_payload["written_path"].endswith("96_Weekly_Review/_LTI_Drafts/LTI-1.0.md")
 
     signal_rows = orchestrator.signals.read_all()
     linked = [row for row in signal_rows if row["id"] == high.id][0]

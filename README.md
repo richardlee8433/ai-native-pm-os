@@ -1693,10 +1693,10 @@ Optional flags:
 
 - `orchestrator/data/signals.jsonl`: append-only SIGNAL events (unchanged canonical intake store)
 - `orchestrator/data/signals_index.json`: dedupe index for URLs/fallback hashes in intake storage
-- `<vault_root>/98_Signals/YYYY/MM/<SIG-ID>.md`: time-based Obsidian note writeback for newly accepted signals
+- `<vault_root>/95_Signals/<SIG-ID>.md`: Obsidian note writeback for newly accepted signals
 - `<vault_root>/00_Index/signal_url_index.json`: URL/fingerprint dedupe index for vault writeback
 
-Signals are stored in time-based folders under `98_Signals`; graph-style classification remains metadata-driven via frontmatter fields rather than folder taxonomy.
+Signals are stored as flat note files under `95_Signals`; graph-style classification remains metadata-driven via frontmatter fields rather than folder taxonomy.
 
 ### Add a source
 
@@ -1711,15 +1711,18 @@ Edit `ingest/sources.yaml` and add a new source entry with:
 
 ## Vault Writeback Configuration (Layer 5)
 
-`writeback apply` now persists `LTI_NODE` artifacts into the Obsidian vault as Markdown.
+`writeback apply` now routes `LTI_NODE`/`RTI_NODE` artifacts with human-approval guards.
 
 - Environment variable: `PM_OS_VAULT_ROOT`
   - If set, Layer 5 writeback stores LTI notes under that vault root.
   - If unset, default vault root is `.vault_test`.
-- Folder convention for LTI writeback:
-  - `<vault_root>/02_LTI/<LTI_ID>.md`
-  - Example: `.vault_test/02_LTI/LTI-1.0.md`
-- Files are written atomically (temp file + replace) and overwritten on re-apply for the same action/LTI id.
+- Default (no human approval):
+  - LTI drafts: `<vault_root>/96_Weekly_Review/_LTI_Drafts/<LTI_ID>.md`
+  - RTI proposals: `<vault_root>/97_Decisions/_RTI_Proposals/<RTI_ID>.md`
+- With `--human-approved`:
+  - LTI final: `<vault_root>/02_LTI/<LTI_ID>.md`
+  - RTI final: `<vault_root>/RTI/<RTI_ID>.md`
+- Files are written atomically (temp file + replace).
 
 ## Weekly Task Scheduler Snippet (Layer 1 Intake)
 
@@ -1730,4 +1733,4 @@ $env:PM_OS_VAULT_ROOT="G:\My Drive\AI Native PM\AI Native PM\"
 python -m orchestrator.cli ingest --since-days 7 --limit-per-source 5 --threshold 0 --writeback-signals
 ```
 
-This writes newly ingested signal notes to `<PM_OS_VAULT_ROOT>\98_Signals\SIG-*.md`.
+This writes newly ingested signal notes to `<PM_OS_VAULT_ROOT>\95_Signals\SIG-*.md`.
