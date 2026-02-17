@@ -17,7 +17,7 @@ _URL_PATTERN = re.compile(r"https?://[^\s)\]>\"']+")
 class SignalVaultWriter:
     def __init__(self, vault_root: Path):
         self.vault_root = Path(vault_root)
-        self.signals_root = self.vault_root / "98_Signals"
+        self.signals_root = self.vault_root / "95_Signals"
         self.index_path = self.vault_root / "00_Index" / "signal_url_index.json"
 
     def write_signals(self, signals: list[SIGNAL]) -> dict[str, int]:
@@ -53,8 +53,7 @@ class SignalVaultWriter:
         return summary
 
     def _note_path(self, signal: SIGNAL) -> Path:
-        ts = self._timestamp_to_utc(signal.timestamp)
-        return self.signals_root / f"{ts:%Y}" / f"{ts:%m}" / f"{signal.id}.md"
+        return self.signals_root / f"{signal.id}.md"
 
     @staticmethod
     def _timestamp_to_utc(value: datetime | str) -> datetime:
@@ -80,14 +79,20 @@ class SignalVaultWriter:
             f"url: {self._yaml_scalar(signal.url)}",
             f"priority_score: {self._yaml_scalar(signal.priority_score)}",
             f"impact_area: {self._yaml_list(signal.impact_area)}",
-            "judgment_status: pending",
-            "linked_rti: []",
+            f"ingested_at: {self._iso_timestamp(datetime.now(timezone.utc))}",
+            "status: raw",
             f"linked_action_id: {self._yaml_scalar(signal.linked_action_id)}",
             "---",
             "",
             f"# {signal.title or signal.id}",
             "",
+            "## Source",
+            signal.source,
+            "",
+            "## Preview",
             signal.content or "",
+            "",
+            "## Full Evidence (optional; appended later)",
         ]
 
         links = self._extract_links(signal)

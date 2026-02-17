@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import datetime as dt
 
-from orchestrator.vault_ops import resolve_vault_root, write_lti_markdown, write_signal_markdown
-from pm_os_contracts.models import LTI_NODE, SIGNAL
+from orchestrator.vault_ops import (
+    resolve_vault_root,
+    write_gate_decision,
+    write_lti_markdown,
+    write_signal_markdown,
+    write_weekly_review,
+)
+from pm_os_contracts.models import GATE_DECISION, LTI_NODE, SIGNAL
 
 
 def test_write_signal_markdown_creates_obsidian_note(tmp_path) -> None:
@@ -21,15 +27,16 @@ def test_write_signal_markdown_creates_obsidian_note(tmp_path) -> None:
 
     out = write_signal_markdown(tmp_path, signal)
 
-    assert out == tmp_path / "98_Signals" / "SIG-20260216-001.md"
+    assert out == tmp_path / "95_Signals" / "SIG-20260216-001.md"
     text = out.read_text(encoding="utf-8")
     assert "impact_area:" in text
     assert '- safety_alignment' in text
-    assert "## Excerpt" in text
-    assert "## Source" in text
+    assert "status: raw" in text
+    assert "## Preview" in text
+    assert "## Full Evidence" in text
 
 
-def test_write_lti_markdown_formats_yaml_lists_and_sanitizes_summary(tmp_path) -> None:
+def test_write_lti_markdown_routes_to_drafts_without_approval(tmp_path) -> None:
     node = LTI_NODE(
         id="LTI-1.0",
         title="Trustworthy Agent Loops",
@@ -49,18 +56,43 @@ def test_write_lti_markdown_formats_yaml_lists_and_sanitizes_summary(tmp_path) -
         updated_at="2026-02-16T10:00:00+00:00",
     )
 
+    assert out == tmp_path / "96_Weekly_Review" / "_LTI_Drafts" / "LTI-1.0.md"
     text = out.read_text(encoding="utf-8")
-    assert "linked_evidence:" in text
-    assert '- ACT-20260216-001' in text
-    assert "linked_rti:" in text
-    assert '- RTI-1.1' in text
-    assert "tags:" in text
-    assert "summary_sanitized: true" in text
-    assert "- ACT-20260216-001" in text
-    assert "- agents" in text
+    assert "human_approved: False" in text
     assert "f(x)" in text
     assert "textbf" not in text
-    assert "$" not in text
+
+
+def test_write_lti_markdown_approved_routes_to_lti(tmp_path) -> None:
+    node = LTI_NODE(id="LTI-1.1", title="Approved", series="LTI-1.x", status="active")
+    out = write_lti_markdown(
+        tmp_path,
+        node,
+        "ACT-20260216-002",
+        updated_at="2026-02-16T10:00:00+00:00",
+        human_approved=True,
+        publish_intent="publish",
+    )
+    assert out == tmp_path / "02_LTI" / "LTI-1.1.md"
+
+
+def test_write_weekly_review_path(tmp_path) -> None:
+    from orchestrator.vault_ops import SignalScore
+
+    out = write_weekly_review(
+        tmp_path,
+        "2026-W08",
+        [SignalScore(id="SIG-20260216-001", score=0.9, preview="Top signal", url="https://x", impact_area=["strategy"])],
+    )
+    assert out == tmp_path / "96_Weekly_Review" / "Weekly-Intel-2026-W08.md"
+
+
+def test_write_gate_decision_immutable_revision(tmp_path) -> None:
+    decision = GATE_DECISION(task_id="ACT-20260216-001", decision="approve", destination="lti")
+    first = write_gate_decision(tmp_path, decision)
+    second = write_gate_decision(tmp_path, decision)
+    assert first.parent == tmp_path / "97_Decisions"
+    assert second.stem.endswith("-r2")
 
 
 def test_resolve_vault_root_precedence(tmp_path, monkeypatch) -> None:

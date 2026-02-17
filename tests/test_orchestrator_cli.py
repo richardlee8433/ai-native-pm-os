@@ -42,6 +42,7 @@ def test_cli_signal_action_writeback_flow(tmp_path, capsys, monkeypatch) -> None
     lti_payload = json.loads(capsys.readouterr().out)
     assert lti_payload["id"].startswith("LTI-")
     assert lti_payload["written_path"].endswith(".md")
+    assert "96_Weekly_Review/_LTI_Drafts" in lti_payload["written_path"]
 
 
 
@@ -87,8 +88,8 @@ def test_cli_ingest_writes_signal_markdown_and_vault_root_precedence(tmp_path, c
     assert report["vault_written"] == 1
     assert len(report["vault_paths"]) == 1
 
-    env_notes = list((env_vault / "98_Signals").glob("*.md")) if (env_vault / "98_Signals").exists() else []
-    cli_notes = list((cli_vault / "98_Signals").glob("*.md"))
+    env_notes = list((env_vault / "95_Signals").glob("*.md")) if (env_vault / "95_Signals").exists() else []
+    cli_notes = list((cli_vault / "95_Signals").glob("*.md"))
     assert env_notes == []
     assert len(cli_notes) == 1
 
@@ -130,8 +131,23 @@ def test_cli_ingest_no_writeback_without_flag(tmp_path, capsys, monkeypatch) -> 
     report = json.loads(capsys.readouterr().out)
     assert report["vault_written"] == 0
     assert report["vault_paths"] == []
-    assert not (env_vault / "98_Signals").exists()
+    assert not (env_vault / "95_Signals").exists()
 
+
+
+def test_cli_writeback_human_approved_routes_to_final_lti(tmp_path, capsys, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
+
+    main(["--data-dir", str(data_dir), "signal", "add", "--source", "manual", "--type", "capability", "--title", "S"])
+    _ = capsys.readouterr()
+    main(["--data-dir", str(data_dir), "action", "generate"])
+    _ = capsys.readouterr()
+
+    rc = main(["--data-dir", str(data_dir), "writeback", "apply", "--human-approved", "--publish-intent", "publish"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "/02_LTI/" in payload["written_path"].replace("\\", "/")
 
 def test_ingest_help_includes_writeback_flag(capsys) -> None:
     try:

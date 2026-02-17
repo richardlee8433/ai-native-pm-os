@@ -43,7 +43,7 @@ def test_signal_vault_writeback_dedupe_and_index(tmp_path) -> None:
 
     assert summary == {"written": 2, "skipped_existing": 0, "skipped_dupe": 2}
 
-    month_dir = vault_root / "98_Signals" / "2026" / "02"
+    month_dir = vault_root / "95_Signals"
     assert (month_dir / "SIG-20260216-001.md").exists()
     assert (month_dir / "SIG-20260216-004.md").exists()
     assert not (month_dir / "SIG-20260216-002.md").exists()

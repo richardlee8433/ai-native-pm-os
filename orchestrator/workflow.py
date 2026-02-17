@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 from pathlib import Path
 from typing import Any, Callable
 
-import os
-
-from pm_os_contracts.models import ACTION_TASK, LTI_NODE, SIGNAL
+from pm_os_contracts.models import ACTION_TASK, LTI_NODE, RTI_NODE, SIGNAL
 
 from orchestrator.storage import JSONLStorage
-from orchestrator.vault_ops import write_lti_markdown
+from orchestrator.vault_ops import write_lti_markdown, write_rti_markdown
 
 
 class Orchestrator:
@@ -29,6 +28,7 @@ class Orchestrator:
         self.tasks = JSONLStorage(self.data_dir / "weekly_tasks.jsonl")
         self.writebacks = JSONLStorage(self.data_dir / "writebacks.jsonl")
         self.lti_nodes = JSONLStorage(self.data_dir / "lti_nodes.jsonl")
+        self.rti_nodes = JSONLStorage(self.data_dir / "rti_nodes.jsonl")
 
     def add_signal(
         self,
@@ -107,35 +107,71 @@ class Orchestrator:
 
         return task
 
-    def apply_writeback(self, *, action_id: str | None = None) -> dict[str, Any]:
+    def apply_writeback(
+        self,
+        *,
+        action_id: str | None = None,
+        artifact_kind: str = "lti",
+        human_approved: bool = False,
+        publish_intent: str | None = None,
+        rti_intent: str | None = None,
+    ) -> dict[str, Any]:
         task = self._resolve_task(action_id)
-        lti_id = self._existing_lti_id_for_action(task.id) or self._next_lti_id()
+        artifact_kind = artifact_kind.lower()
 
-        lti_node = LTI_NODE(
-            id=lti_id,
-            title=task.goal,
-            series="LTI-1.x",
-            status="under_review",
-            summary=task.context,
-            linked_evidence=[task.id],
-            published_at=self.now_provider().date(),
-        )
-        self.lti_nodes.append(lti_node.to_dict())
-        written_path = write_lti_markdown(
-            self.vault_root,
-            lti_node,
-            task.id,
-            updated_at=self.now_provider().replace(microsecond=0).isoformat(),
-        )
+        if artifact_kind == "lti":
+            lti_id = self._existing_lti_id_for_action(task.id) or self._next_lti_id()
+            lti_node = LTI_NODE(
+                id=lti_id,
+                title=task.goal,
+                series="LTI-1.x",
+                status="under_review",
+                summary=task.context,
+                linked_evidence=[task.id],
+                published_at=self.now_provider().date(),
+            )
+            self.lti_nodes.append(lti_node.to_dict())
+            written_path = write_lti_markdown(
+                self.vault_root,
+                lti_node,
+                task.id,
+                updated_at=self.now_provider().replace(microsecond=0).isoformat(),
+                human_approved=human_approved,
+                publish_intent=publish_intent,
+            )
+            payload = lti_node.to_dict()
+            payload["id"] = lti_node.id
+        elif artifact_kind == "rti":
+            rti_id = self._next_rti_id()
+            rti_node = RTI_NODE(
+                id=rti_id,
+                title=task.goal,
+                status="under_review",
+                linked_evidence=[task.id],
+            )
+            self.rti_nodes.append(rti_node.to_dict())
+            written_path = write_rti_markdown(
+                self.vault_root,
+                rti_node,
+                updated_at=self.now_provider().replace(microsecond=0).isoformat(),
+                human_approved=human_approved,
+                rti_intent=rti_intent,
+            )
+            payload = rti_node.to_dict()
+            payload["id"] = rti_node.id
+        else:
+            raise ValueError(f"Unsupported artifact kind: {artifact_kind}")
+
         self.writebacks.append(
             {
                 "action_id": task.id,
                 "status": "applied",
-                "lti_id": lti_node.id,
+                "artifact_kind": artifact_kind,
+                "artifact_id": payload["id"],
+                "human_approved": human_approved,
                 "applied_at": self.now_provider().isoformat(),
             }
         )
-        payload = lti_node.to_dict()
         payload["written_path"] = str(written_path)
         return payload
 
@@ -143,8 +179,8 @@ class Orchestrator:
         for writeback in reversed(self.writebacks.read_all()):
             if writeback.get("action_id") != action_id:
                 continue
-            lti_id = writeback.get("lti_id")
-            if isinstance(lti_id, str):
+            lti_id = writeback.get("artifact_id")
+            if isinstance(lti_id, str) and lti_id.startswith("LTI-"):
                 return lti_id
         return None
 
@@ -199,3 +235,17 @@ class Orchestrator:
                 continue
         next_minor = (max(minor_numbers) + 1) if minor_numbers else len(existing)
         return f"LTI-1.{next_minor}"
+
+    def _next_rti_id(self) -> str:
+        existing = [RTI_NODE.from_dict(row) for row in self.rti_nodes.read_all()]
+        if not existing:
+            return "RTI-1.0"
+
+        minor_numbers: list[int] = []
+        for node in existing:
+            try:
+                minor_numbers.append(int(node.id.split(".")[1]))
+            except (IndexError, ValueError):
+                continue
+        next_minor = (max(minor_numbers) + 1) if minor_numbers else len(existing)
+        return f"RTI-1.{next_minor}"
