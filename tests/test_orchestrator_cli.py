@@ -131,6 +131,7 @@ def test_cli_ingest_no_writeback_without_flag(tmp_path, capsys, monkeypatch) -> 
     report = json.loads(capsys.readouterr().out)
     assert report["vault_written"] == 0
     assert report["vault_paths"] == []
+    assert report["index_path"].endswith("signals_index.json")
     assert not (env_vault / "95_Signals").exists()
 
 
@@ -158,3 +159,4 @@ def test_ingest_help_includes_writeback_flag(capsys) -> None:
     help_text = capsys.readouterr().out
     assert "--writeback-signals" in help_text
     assert "--vault-root" in help_text
+    assert "--index-path" in help_text
