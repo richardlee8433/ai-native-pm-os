@@ -61,6 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--since-days", type=int, default=7)
     ingest.add_argument("--limit-per-source", type=int, default=10)
     ingest.add_argument("--out", default="orchestrator/data/signals.jsonl")
+    ingest.add_argument(
+        "--index-path",
+        default=None,
+        help="Optional dedupe index file path (default: <out_dir>/signals_index.json)",
+    )
     ingest.add_argument("--threshold", type=float, default=MIN_PRIORITY_THRESHOLD)
     ingest.add_argument("--vault-root")
     ingest.add_argument(
@@ -130,8 +135,9 @@ def _run_ingest(args: argparse.Namespace) -> int:
                 continue
             signals.append(signal)
 
-    written_signals, skipped_dupes = append_signals_with_results(args.out, signals)
+    written_signals, skipped_dupes = append_signals_with_results(args.out, signals, index_path=args.index_path)
     written = len(written_signals)
+    dedupe_index_path = Path(args.index_path) if args.index_path else Path(args.out).parent / "signals_index.json"
 
     vault_paths: list[str] = []
     if args.writeback_signals:
@@ -145,6 +151,7 @@ def _run_ingest(args: argparse.Namespace) -> int:
         "filtered_low_priority": filtered_low_priority,
         "failed_count": len(failures),
         "out": str(Path(args.out)),
+        "index_path": str(dedupe_index_path),
         "failures": failures,
         "vault_written": len(vault_paths),
         "vault_paths": vault_paths[:10],
