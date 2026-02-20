@@ -7,3 +7,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$env:PM_OS_VAULT_ROO
 ```
 
 This writes newly ingested signal notes to `<PM_OS_VAULT_ROOT>\95_Signals\SIG-*.md`.
+
+
+## One-click PowerShell script (OpenAI RSS only)
+
+Use `scripts/run_openai_ingest_to_obsidian.ps1` to test OpenAI RSS end-to-end (fetch → normalize → writeback to Obsidian).
+
+```powershell
+pwsh -File .\scripts\run_openai_ingest_to_obsidian.ps1 -VaultRoot "G:\My Drive\AI Native PM\AI Native PM\"
+```
+
+Optional parameters:
+- `-RepoRoot <path>`
+- `-PythonExe python`
+- `-SinceDays 30`
+- `-LimitPerSource 10`
+- `-Threshold 0`
+- `-KeepTempSources`
