@@ -259,6 +259,14 @@ def main(argv: list[str] | None = None) -> int:
             reason=args.reason,
             next_actions=args.next_actions,
         )
+        if args.decision == "reject" and "cos_id" not in payload:
+            payload.update(
+                orchestrator.handle_rejection(
+                    signal_id=args.signal_id,
+                    decision_id=payload["decision_id"],
+                    decision_reason=payload["reason"],
+                )
+            )
         print(json.dumps(payload))
         return 0
 

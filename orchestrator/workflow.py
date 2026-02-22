@@ -5,6 +5,7 @@ import json
 import os
 import hashlib
 import re
+from tempfile import NamedTemporaryFile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Callable
@@ -44,6 +45,7 @@ class Orchestrator:
         self.lti_nodes = JSONLStorage(self.data_dir / "lti_nodes.jsonl")
         self.rti_nodes = JSONLStorage(self.data_dir / "rti_nodes.jsonl")
         self.decision_index_path = self.data_dir / "decision_index.json"
+        self.cos_index_path = self.data_dir / "cos_index.json"
 
     def run_deepening(
         self,
@@ -484,6 +486,14 @@ class Orchestrator:
                 signal_updated = True
                 break
 
+        rejection_payload: dict[str, Any] = {}
+        if decision == "reject":
+            rejection_payload = self.handle_rejection(
+                signal_id=signal.id,
+                decision_id=decision_id,
+                decision_reason=resolved_reason,
+            )
+
         return {
             **index_entry,
             "reason": resolved_reason,
@@ -492,7 +502,181 @@ class Orchestrator:
             "deepening_task_created": deepening_task_created,
             "deepening_task_id": deepening_task_id,
             "signal_updated": signal_updated,
+            **rejection_payload,
         }
+
+    def handle_rejection(self, *, signal_id: str, decision_id: str, decision_reason: str) -> dict[str, Any]:
+        signal = self._select_signal(signal_id)
+        now = self.now_provider().replace(microsecond=0)
+        now_iso = now.isoformat()
+
+        cos_index = self._read_cos_index()
+        for entry in cos_index:
+            if entry.get("decision_id") == decision_id:
+                return {
+                    "cos_id": entry["cos_id"],
+                    "pattern_key": entry["pattern_key"],
+                    "linked_rti": entry.get("linked_rti"),
+                }
+
+        pattern_key = self._compute_pattern_key(signal.to_dict(), decision_reason)
+        cos_id = self._next_case_id(now.date(), cos_index)
+        cos_path = self.vault_root / "06_Archive" / "COS" / f"{cos_id}.md"
+        if cos_path.exists():
+            raise FileExistsError(f"COS file already exists: {cos_path}")
+
+        lines = [
+            "---",
+            f"id: {cos_id}",
+            f"signal_id: {signal.id}",
+            f"decision_id: {decision_id}",
+            f"pattern_key: {pattern_key}",
+            "impact_area:",
+        ]
+        impact_area = sorted(signal.impact_area or [])
+        if impact_area:
+            lines.extend([f"  - {item}" for item in impact_area])
+        else:
+            lines.append("[]")
+        lines.extend(
+            [
+                f"reason: {self._yaml_safe(decision_reason)}",
+                f"created_at: {now_iso}",
+                "immutable: true",
+                "---",
+                "",
+                "# COS Case",
+                "",
+                "## Signal Summary",
+                _excerpt(signal.content, limit=280) or signal.title or signal.id,
+                "",
+                "## Rejection Reason",
+                decision_reason,
+                "",
+                "## Pattern Key",
+                pattern_key,
+                "",
+            ]
+        )
+        self._write_atomic(cos_path, "\n".join(lines))
+
+        entry = {
+            "cos_id": cos_id,
+            "signal_id": signal.id,
+            "decision_id": decision_id,
+            "pattern_key": pattern_key,
+            "created_at": now_iso,
+            "linked_rti": None,
+        }
+        cos_index.append(entry)
+        trigger_payload = self._apply_rule_of_three(pattern_key=pattern_key, cos_index=cos_index, now=now)
+        self._write_cos_index(cos_index)
+
+        return {
+            "cos_id": cos_id,
+            "pattern_key": pattern_key,
+            **trigger_payload,
+        }
+
+    def _apply_rule_of_three(self, *, pattern_key: str, cos_index: list[dict[str, Any]], now: dt.datetime) -> dict[str, Any]:
+        matches = [entry for entry in cos_index if entry.get("pattern_key") == pattern_key]
+        if len(matches) < 3:
+            return {"linked_rti": None, "rti_triggered": False}
+
+        linked_existing = next((entry.get("linked_rti") for entry in matches if entry.get("linked_rti")), None)
+        if isinstance(linked_existing, str):
+            return {"linked_rti": linked_existing, "rti_triggered": False}
+
+        rti_id = self._next_rti_revision_id(now.date())
+        rti_path = self.vault_root / "01_RTI" / f"{rti_id}.md"
+        if rti_path.exists():
+            raise FileExistsError(f"RTI file already exists: {rti_path}")
+
+        content = "\n".join(
+            [
+                "---",
+                f"id: {rti_id}",
+                f"title: RTI review for pattern {pattern_key}",
+                "status: under_review",
+                "trigger_reason: Rule of Three",
+                f"trigger_pattern_key: {pattern_key}",
+                f"updated_at: {now.isoformat()}",
+                "immutable: false",
+                "---",
+                "",
+                f"# RTI Revision {rti_id}",
+                "",
+                "Triggered automatically by repeated COS pattern.",
+                "",
+            ]
+        )
+        self._write_atomic(rti_path, content)
+
+        task_id = f"ACT-VALIDATE-{rti_id}"
+        if not any(task.get("id") == task_id for task in self.tasks.read_all()):
+            self.tasks.append(
+                {
+                    "id": task_id,
+                    "type": "rti_validation",
+                    "goal": "Re-evaluate RTI due to repeated COS pattern",
+                    "status": "pending",
+                    "auto_generated": True,
+                    "created_at": now.isoformat(),
+                    "rti_id": rti_id,
+                    "trigger_pattern_key": pattern_key,
+                }
+            )
+
+        for entry in matches:
+            entry["linked_rti"] = rti_id
+
+        return {"linked_rti": rti_id, "rti_triggered": True}
+
+    def _compute_pattern_key(self, signal: dict[str, Any], decision_reason: str) -> str:
+        normalized_reason = self._normalize_text(decision_reason)
+        impact = sorted(str(item).strip().lower() for item in (signal.get("impact_area") or []) if str(item).strip())
+        impact_key = ",".join(impact)
+        return f"{normalized_reason}|{impact_key}"
+
+    def _normalize_text(self, value: str) -> str:
+        lowered = value.lower()
+        no_punctuation = re.sub(r"[^a-z0-9\s]", " ", lowered)
+        return " ".join(no_punctuation.split())
+
+    def _next_case_id(self, day: dt.date, rows: list[dict[str, Any]]) -> str:
+        date_key = day.strftime("%Y%m%d")
+        matching = [row for row in rows if str(row.get("cos_id", "")).startswith(f"COS-{date_key}-")]
+        return f"COS-{date_key}-{len(matching) + 1:03d}"
+
+    def _next_rti_revision_id(self, day: dt.date) -> str:
+        date_key = day.strftime("%Y%m%d")
+        rti_dir = self.vault_root / "01_RTI"
+        existing = list(rti_dir.glob(f"RTI-{date_key}-*.md")) if rti_dir.exists() else []
+        return f"RTI-{date_key}-{len(existing) + 1:03d}"
+
+    def _read_cos_index(self) -> list[dict[str, Any]]:
+        if not self.cos_index_path.exists():
+            return []
+        return json.loads(self.cos_index_path.read_text(encoding="utf-8"))
+
+    def _write_cos_index(self, rows: list[dict[str, Any]]) -> None:
+        self.cos_index_path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_atomic(self.cos_index_path, json.dumps(rows, indent=2))
+
+    def _write_atomic(self, path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as tmp:
+            tmp.write(content)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_name = tmp.name
+        os.replace(tmp_name, path)
+
+    def _yaml_safe(self, value: str) -> str:
+        if re.match(r"^[A-Za-z0-9_./: -]+$", value):
+            return value
+        escaped = value.replace('"', '\\"')
+        return f'"{escaped}"'
 
     def _find_existing_deepening_task_id(self, signal_id: str) -> str | None:
         for task in self.tasks.read_all():
