@@ -71,11 +71,11 @@ function Invoke-CliJson {
 
     try {
         $output = & python @Arguments 2>&1
+        $joined = ($output | ForEach-Object { $_.ToString() }) -join "`n"
         if ($LASTEXITCODE -ne 0) {
-            throw "Command failed (exit=$LASTEXITCODE): python $($Arguments -join ' ')`n$output"
+            throw "Command failed (exit=$LASTEXITCODE): python $($Arguments -join ' ')`n$joined"
         }
 
-        $joined = ($output | ForEach-Object { $_.ToString() }) -join "`n"
         $jsonLine = $null
         $split = $joined -split "`r?`n"
         for ($i = $split.Length - 1; $i -ge 0; $i--) {
@@ -88,7 +88,12 @@ function Invoke-CliJson {
         if (-not $jsonLine) {
             throw "No JSON output found for: python $($Arguments -join ' ')`n$joined"
         }
-        return ($jsonLine | ConvertFrom-Json)
+        try {
+            return ($jsonLine | ConvertFrom-Json)
+        }
+        catch {
+            throw "Failed to parse JSON output for: python $($Arguments -join ' ')`n$joined"
+        }
     }
     finally {
         if ($ExtraEnv) {
@@ -122,13 +127,13 @@ try {
     $null = New-Item -ItemType Directory -Path $dataDir -Force
 
     @"
-version: 1
-sources:
-  - id: openai-rss
-    type: rss
-    url: https://openai.com/news/rss.xml
-    enabled: true
-"@ | Set-Content -LiteralPath $tempSources -Encoding UTF8
+- id: openai_news
+  name: "OpenAI News"
+  type: rss
+  url: "https://openai.com/news/rss.xml"
+  priority_weight: 1.0
+  signal_type: ecosystem
+"@ | Set-Content -LiteralPath $tempSources -Encoding Ascii
 
     $commonEnv = @{ PM_OS_VAULT_ROOT = $testVault }
 
