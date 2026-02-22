@@ -160,3 +160,75 @@ def test_ingest_help_includes_writeback_flag(capsys) -> None:
     assert "--writeback-signals" in help_text
     assert "--vault-root" in help_text
     assert "--index-path" in help_text
+
+
+def test_cli_gate_decide_generates_default_actions(tmp_path, capsys, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
+
+    main([
+        "--data-dir",
+        str(data_dir),
+        "signal",
+        "add",
+        "--source",
+        "manual",
+        "--type",
+        "capability",
+        "--title",
+        "Signal for decision",
+        "--content",
+        "Preview content",
+    ])
+    signal_payload = json.loads(capsys.readouterr().out)
+
+    rc = main([
+        "--data-dir",
+        str(data_dir),
+        "gate",
+        "decide",
+        "--signal-id",
+        signal_payload["id"],
+        "--decision",
+        "approved",
+        "--priority",
+        "High",
+    ])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["decision_id"].startswith("DEC-")
+    assert payload["next_actions"] == ["Deepen evidence (L3 full fetch)", "Draft LTI insight note"]
+
+
+def test_cli_gate_decide_rejects_overwrite(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
+
+    signal_rc = main([
+        "--data-dir",
+        str(data_dir),
+        "signal",
+        "add",
+        "--source",
+        "manual",
+        "--type",
+        "capability",
+        "--title",
+        "Signal for decision",
+    ])
+    assert signal_rc == 0
+
+    import datetime as dt
+    import pytest
+
+    from orchestrator.workflow import Orchestrator
+
+    orchestrator = Orchestrator(data_dir=data_dir, now_provider=lambda: dt.datetime(2026, 2, 16, tzinfo=dt.timezone.utc))
+    signals = orchestrator.signals.read_all()
+    signal_id = signals[0]["id"]
+
+    orchestrator.create_gate_decision(signal_id=signal_id, decision="reject", priority="Low")
+    orchestrator.decision_index_path.unlink()
+
+    with pytest.raises(FileExistsError):
+        orchestrator.create_gate_decision(signal_id=signal_id, decision="reject", priority="Low")

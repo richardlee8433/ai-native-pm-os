@@ -8,11 +8,11 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from pm_os_contracts.models import GATE_DECISION, LTI_NODE, RTI_NODE, SIGNAL
+from pm_os_contracts.models import LTI_NODE, RTI_NODE, SIGNAL
 
 SIGNALS_DIR = "95_Signals"
 WEEKLY_DIR = "96_Weekly_Review"
-DECISIONS_DIR = "97_Decisions"
+DECISIONS_DIR = "97_Gate_Decisions"
 LTI_DIR = "02_LTI"
 RTI_DIR = "RTI"
 LTI_DRAFTS_DIR = "96_Weekly_Review/_LTI_Drafts"
@@ -189,37 +189,52 @@ def write_weekly_review_from_signals(vault_root: Path, week_id: str, signals: li
     return write_weekly_review(vault_root, week_id, shortlist[:limit])
 
 
-def write_gate_decision(vault_root: Path, decision: GATE_DECISION) -> Path:
-    decided_at = decision.decided_at or datetime.now(tz=timezone.utc)
-    week_id = f"{decided_at:%Y}-W{decided_at:%V}"
-    base_name = f"DEC-{week_id}-001"
-    target = vault_root / DECISIONS_DIR / f"{base_name}.md"
-
+def write_gate_decision(
+    vault_root: Path,
+    *,
+    decision_id: str,
+    signal_id: str,
+    decision: str,
+    priority: str,
+    decision_date: date,
+    reason: str,
+    next_actions: list[str],
+    signal_summary: str,
+) -> Path:
+    target = vault_root / DECISIONS_DIR / f"{decision_id}.md"
     if target.exists():
-        rev = 2
-        while True:
-            candidate = vault_root / DECISIONS_DIR / f"{base_name}-r{rev}.md"
-            if not candidate.exists():
-                target = candidate
-                break
-            rev += 1
+        raise FileExistsError(f"Decision file already exists: {target}")
+
+    decision_statement = f"{decision.capitalize()} signal {signal_id} with {priority} priority."
+    next_actions_markdown = "\n".join(f"- {item}" for item in next_actions)
 
     lines = [
         "---",
-        f"task_id: {_yaml_scalar(decision.task_id)}",
-        f"eval_report_id: {_yaml_scalar(decision.eval_report_id)}",
-        f"decision: {_yaml_scalar(decision.decision)}",
-        f"destination: {_yaml_scalar(decision.destination)}",
-        f"post_action: {_yaml_scalar(decision.post_action)}",
-        f"canonical_decision: {_yaml_scalar(decision.canonical_decision)}",
-        f"decided_at: {_yaml_scalar(_normalize_datetime(decided_at))}",
+        f"id: {_yaml_scalar(decision_id)}",
+        f"signal_id: {_yaml_scalar(signal_id)}",
+        f"decision: {_yaml_scalar(decision)}",
+        f"priority: {_yaml_scalar(priority)}",
+        f"decision_date: {_yaml_scalar(decision_date.isoformat())}",
+        f"reason: {_yaml_scalar(reason)}",
+        "next_actions:",
+        _yaml_list(next_actions),
+        "linked_lti: []",
         "immutable: true",
         "---",
         "",
-        f"# {target.stem}",
+        "# Gate Decision Note",
         "",
-        "## Decision Reason",
-        decision.decision_reason or "(none provided)",
+        "## Signal Summary",
+        signal_summary,
+        "",
+        "## Decision",
+        decision_statement,
+        "",
+        "## Rationale",
+        reason,
+        "",
+        "## Next Actions",
+        next_actions_markdown,
         "",
     ]
     return _write_atomic(target, "\n".join(lines))

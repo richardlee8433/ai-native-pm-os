@@ -9,7 +9,7 @@ from orchestrator.vault_ops import (
     write_signal_markdown,
     write_weekly_review,
 )
-from pm_os_contracts.models import GATE_DECISION, LTI_NODE, SIGNAL
+from pm_os_contracts.models import LTI_NODE, SIGNAL
 
 
 def test_write_signal_markdown_creates_obsidian_note(tmp_path) -> None:
@@ -87,12 +87,34 @@ def test_write_weekly_review_path(tmp_path) -> None:
     assert out == tmp_path / "96_Weekly_Review" / "Weekly-Intel-2026-W08.md"
 
 
-def test_write_gate_decision_immutable_revision(tmp_path) -> None:
-    decision = GATE_DECISION(task_id="ACT-20260216-001", decision="approve", destination="lti")
-    first = write_gate_decision(tmp_path, decision)
-    second = write_gate_decision(tmp_path, decision)
-    assert first.parent == tmp_path / "97_Decisions"
-    assert second.stem.endswith("-r2")
+def test_write_gate_decision_immutable_no_overwrite(tmp_path) -> None:
+    first = write_gate_decision(
+        tmp_path,
+        decision_id="DEC-20260216-001",
+        signal_id="SIG-20260216-001",
+        decision="approved",
+        priority="High",
+        decision_date=dt.date(2026, 2, 16),
+        reason="Strong strategic fit.",
+        next_actions=["Deepen evidence (L3 full fetch)", "Draft LTI insight note"],
+        signal_summary="Signal preview text.",
+    )
+    assert first.parent == tmp_path / "97_Gate_Decisions"
+
+    import pytest
+
+    with pytest.raises(FileExistsError):
+        write_gate_decision(
+            tmp_path,
+            decision_id="DEC-20260216-001",
+            signal_id="SIG-20260216-001",
+            decision="approved",
+            priority="High",
+            decision_date=dt.date(2026, 2, 16),
+            reason="Strong strategic fit.",
+            next_actions=["Deepen evidence (L3 full fetch)", "Draft LTI insight note"],
+            signal_summary="Signal preview text.",
+        )
 
 
 def test_resolve_vault_root_precedence(tmp_path, monkeypatch) -> None:
