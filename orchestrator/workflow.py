@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -8,7 +9,14 @@ from typing import Any, Callable
 from pm_os_contracts.models import ACTION_TASK, LTI_NODE, RTI_NODE, SIGNAL
 
 from orchestrator.storage import JSONLStorage
-from orchestrator.vault_ops import write_lti_markdown, write_rti_markdown
+from orchestrator.vault_ops import _excerpt, write_gate_decision, write_lti_markdown, write_rti_markdown
+
+DEFAULT_NEXT_ACTIONS = {
+    "approved": ["Deepen evidence (L3 full fetch)", "Draft LTI insight note"],
+    "needs_more_info": ["Fetch full article body", "Re-evaluate after deepening"],
+    "deferred": ["Re-evaluate in next weekly cycle"],
+    "reject": ["Archive signal"],
+}
 
 
 class Orchestrator:
@@ -29,6 +37,7 @@ class Orchestrator:
         self.writebacks = JSONLStorage(self.data_dir / "writebacks.jsonl")
         self.lti_nodes = JSONLStorage(self.data_dir / "lti_nodes.jsonl")
         self.rti_nodes = JSONLStorage(self.data_dir / "rti_nodes.jsonl")
+        self.decision_index_path = self.data_dir / "decision_index.json"
 
     def add_signal(
         self,
@@ -175,6 +184,55 @@ class Orchestrator:
         payload["written_path"] = str(written_path)
         return payload
 
+    def create_gate_decision(
+        self,
+        *,
+        signal_id: str,
+        decision: str,
+        priority: str,
+        reason: str | None = None,
+        next_actions: list[str] | None = None,
+    ) -> dict[str, Any]:
+        signal = self._select_signal(signal_id)
+        now = self.now_provider()
+        decision_id = self._next_decision_id(now.date())
+
+        resolved_reason = (reason or "No reason provided.").strip()
+        resolved_actions = [item.strip() for item in (next_actions or []) if item.strip()]
+        if not resolved_actions:
+            resolved_actions = DEFAULT_NEXT_ACTIONS[decision]
+
+        signal_summary = _excerpt(signal.content, limit=280) or signal.title or signal.id
+        written_path = write_gate_decision(
+            self.vault_root,
+            decision_id=decision_id,
+            signal_id=signal.id,
+            decision=decision,
+            priority=priority,
+            decision_date=now.date(),
+            reason=resolved_reason,
+            next_actions=resolved_actions,
+            signal_summary=signal_summary,
+        )
+
+        index_rows = self._read_decision_index()
+        index_entry = {
+            "decision_id": decision_id,
+            "signal_id": signal.id,
+            "decision": decision,
+            "priority": priority,
+            "created_at": now.isoformat(),
+        }
+        index_rows.append(index_entry)
+        self._write_decision_index(index_rows)
+
+        return {
+            **index_entry,
+            "reason": resolved_reason,
+            "next_actions": resolved_actions,
+            "written_path": str(written_path),
+        }
+
     def _existing_lti_id_for_action(self, action_id: str) -> str | None:
         for writeback in reversed(self.writebacks.read_all()):
             if writeback.get("action_id") != action_id:
@@ -249,3 +307,21 @@ class Orchestrator:
                 continue
         next_minor = (max(minor_numbers) + 1) if minor_numbers else len(existing)
         return f"RTI-1.{next_minor}"
+
+    def _read_decision_index(self) -> list[dict[str, Any]]:
+        if not self.decision_index_path.exists():
+            return []
+        return json.loads(self.decision_index_path.read_text(encoding="utf-8"))
+
+    def _write_decision_index(self, rows: list[dict[str, Any]]) -> None:
+        self.decision_index_path.parent.mkdir(parents=True, exist_ok=True)
+        self.decision_index_path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+
+    def _next_decision_id(self, day: dt.date) -> str:
+        date_key = day.strftime("%Y%m%d")
+        matching = [
+            row
+            for row in self._read_decision_index()
+            if str(row.get("decision_id", "")).startswith(f"DEC-{date_key}-")
+        ]
+        return f"DEC-{date_key}-{len(matching) + 1:03d}"

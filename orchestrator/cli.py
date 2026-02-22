@@ -95,6 +95,15 @@ def build_parser() -> argparse.ArgumentParser:
     writeback_apply.add_argument("--publish-intent")
     writeback_apply.add_argument("--rti-intent")
 
+    gate_parser = subparsers.add_parser("gate")
+    gate_sub = gate_parser.add_subparsers(dest="gate_command", required=True)
+    gate_decide = gate_sub.add_parser("decide")
+    gate_decide.add_argument("--signal-id", required=True)
+    gate_decide.add_argument("--decision", required=True, choices=["approved", "deferred", "reject", "needs_more_info"])
+    gate_decide.add_argument("--priority", required=True, choices=["High", "Medium", "Low"])
+    gate_decide.add_argument("--reason")
+    gate_decide.add_argument("--next-actions", action="append", default=[])
+
     return parser
 
 
@@ -229,6 +238,17 @@ def main(argv: list[str] | None = None) -> int:
             human_approved=args.human_approved,
             publish_intent=args.publish_intent,
             rti_intent=args.rti_intent,
+        )
+        print(json.dumps(payload))
+        return 0
+
+    if args.command == "gate" and args.gate_command == "decide":
+        payload = orchestrator.create_gate_decision(
+            signal_id=args.signal_id,
+            decision=args.decision,
+            priority=args.priority,
+            reason=args.reason,
+            next_actions=args.next_actions,
         )
         print(json.dumps(payload))
         return 0
