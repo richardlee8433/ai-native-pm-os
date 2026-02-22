@@ -235,3 +235,48 @@ def test_cli_gate_decide_rejects_overwrite(tmp_path, monkeypatch) -> None:
 
     with pytest.raises(FileExistsError):
         orchestrator.create_gate_decision(signal_id=signal_id, decision="reject", priority="Low")
+
+
+def test_cli_deepen_run_returns_report(tmp_path, capsys, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    vault_root = tmp_path / "vault"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
+
+    rc = main([
+        "--data-dir",
+        str(data_dir),
+        "signal",
+        "add",
+        "--source",
+        "manual",
+        "--type",
+        "research",
+        "--title",
+        "CLI deepen",
+        "--url",
+        "https://example.com/news",
+        "--content",
+        "Preview",
+    ])
+    assert rc == 0
+    signal_payload = json.loads(capsys.readouterr().out)
+
+    from orchestrator.vault_ops import write_signal_markdown
+    from orchestrator.workflow import Orchestrator
+
+    orchestrator = Orchestrator(data_dir=data_dir)
+    write_signal_markdown(vault_root, orchestrator.signals.read_all()[0])
+    orchestrator.tasks.append({"id": f"ACT-DEEPEN-{signal_payload['id']}", "type": "deepening", "signal_id": signal_payload["id"], "status": "pending"})
+
+    class _Resp:
+        status_code = 200
+        text = "<html><body>CLI deepened evidence.</body></html>"
+
+    monkeypatch.setattr(Orchestrator, "_http_get", lambda self, url: _Resp.text)
+
+    rc = main(["--data-dir", str(data_dir), "deepen", "run", "--limit", "1"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["processed"] == 1
+    assert payload["completed"] == 1
+    assert payload["results"][0]["status"] == "completed"

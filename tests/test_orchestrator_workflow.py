@@ -162,3 +162,114 @@ def test_gate_non_approved_does_not_create_deepening_task(tmp_path, monkeypatch)
 
     signal_row = orchestrator.signals.read_all()[0]
     assert "gate_status" not in signal_row
+
+
+def test_run_deepening_appends_evidence_and_updates_state(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    vault_root = tmp_path / "vault"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    from orchestrator.vault_ops import write_signal_markdown
+
+    signal = orchestrator.add_signal(
+        source="manual",
+        signal_type="research",
+        title="Deepen this",
+        content="Preview content",
+        url="https://example.com/post",
+    )
+    write_signal_markdown(vault_root, orchestrator.signals.read_all()[0])
+    orchestrator.tasks.append(
+        {
+            "id": f"ACT-DEEPEN-{signal.id}",
+            "type": "deepening",
+            "signal_id": signal.id,
+            "status": "pending",
+            "auto_generated": True,
+        }
+    )
+
+    class _Resp:
+        status_code = 200
+        text = "<html><body><article>Full evidence for signal.</article></body></html>"
+
+    monkeypatch.setattr(Orchestrator, "_http_get", lambda self, url: _Resp.text)
+
+    report = orchestrator.run_deepening(limit=5)
+    assert report["completed"] == 1
+
+    sig_text = (vault_root / "95_Signals" / f"{signal.id}.md").read_text(encoding="utf-8")
+    assert "## Deepened Evidence (L3)" in sig_text
+    assert "fetch_status: ok" in sig_text
+
+    task_row = orchestrator.tasks.read_all()[0]
+    assert task_row["status"] == "completed"
+
+    signal_row = orchestrator.signals.read_all()[0]
+    assert signal_row["deepened"] is True
+
+
+def test_run_deepening_is_idempotent_for_same_url(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    vault_root = tmp_path / "vault"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    from orchestrator.vault_ops import write_signal_markdown
+
+    signal = orchestrator.add_signal(
+        source="manual",
+        signal_type="research",
+        title="Deepen once",
+        content="Preview content",
+        url="https://example.com/idempotent",
+    )
+    write_signal_markdown(vault_root, orchestrator.signals.read_all()[0])
+    orchestrator.tasks.append({"id": f"ACT-DEEPEN-{signal.id}", "type": "deepening", "signal_id": signal.id, "status": "pending"})
+
+    class _Resp:
+        status_code = 200
+        text = "<html><body>Body evidence</body></html>"
+
+    monkeypatch.setattr(Orchestrator, "_http_get", lambda self, url: _Resp.text)
+
+    orchestrator.run_deepening(limit=5)
+    task_rows = orchestrator.tasks.read_all()
+    task_rows[0]["status"] = "pending"
+    orchestrator.tasks.rewrite_all(task_rows)
+    orchestrator.run_deepening(limit=5, force=True)
+
+    sig_text = (vault_root / "95_Signals" / f"{signal.id}.md").read_text(encoding="utf-8")
+    assert sig_text.count("## Deepened Evidence (L3)") == 1
+
+
+def test_run_deepening_failed_fetch_marks_failed_and_writes_failed_note(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    vault_root = tmp_path / "vault"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    from orchestrator.vault_ops import write_signal_markdown
+
+    signal = orchestrator.add_signal(
+        source="manual",
+        signal_type="research",
+        title="Fetch fails",
+        content="Fallback preview",
+        url="https://example.com/fail",
+    )
+    write_signal_markdown(vault_root, orchestrator.signals.read_all()[0])
+    orchestrator.tasks.append({"id": f"ACT-DEEPEN-{signal.id}", "type": "deepening", "signal_id": signal.id, "status": "pending"})
+
+    monkeypatch.setattr(Orchestrator, "_http_get", lambda self, url: (_ for _ in ()).throw(RuntimeError("network down")))
+
+    report = orchestrator.run_deepening(limit=5)
+    assert report["failed"] == 1
+
+    task_row = orchestrator.tasks.read_all()[0]
+    assert task_row["status"] == "failed"
+    assert "network down" in task_row["error"]
+
+    sig_text = (vault_root / "95_Signals" / f"{signal.id}.md").read_text(encoding="utf-8")
+    assert "fetch_status: failed" in sig_text
