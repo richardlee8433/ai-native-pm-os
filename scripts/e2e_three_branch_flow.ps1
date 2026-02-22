@@ -43,7 +43,7 @@ function Read-Jsonl {
     )
     $rows = @()
     if (-not (Test-Path -LiteralPath $Path)) {
-        return $rows
+        return ,$rows
     }
     $lines = Get-Content -LiteralPath $Path
     foreach ($line in $lines) {
@@ -51,7 +51,434 @@ function Read-Jsonl {
             $rows += ($line | ConvertFrom-Json)
         }
     }
-    return $rows
+    return ,$rows
+}
+
+function Write-Jsonl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [object[]]$Rows
+    )
+    $lines = @()
+    foreach ($row in $Rows) {
+        $lines += ($row | ConvertTo-Json -Depth 10 -Compress)
+    }
+    $attempt = 0
+    while ($true) {
+        try {
+            Set-Content -LiteralPath $Path -Value $lines -Encoding Ascii -Force
+            break
+        }
+        catch {
+            $attempt++
+            if ($attempt -ge 3 -or ($_.Exception.Message -notmatch "being used by another process")) {
+                throw
+            }
+            Start-Sleep -Milliseconds 50
+        }
+    }
+}
+
+function Append-Jsonl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [object]$Row
+    )
+    $line = $Row | ConvertTo-Json -Depth 10 -Compress
+    Add-Content -LiteralPath $Path -Value $line -Encoding Ascii
+}
+
+function Get-NowIsoUtc {
+    return (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+}
+
+function Normalize-PatternKey {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text
+    )
+    $lower = $Text.ToLowerInvariant()
+    $normalized = ($lower -replace "[^a-z0-9]+", "-").Trim("-")
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return "pattern"
+    }
+    return $normalized
+}
+
+function Get-CleanPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+    if (Test-Path -LiteralPath $Path) {
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            $suffix = [Guid]::NewGuid().ToString("N")
+            return "${Path}_$suffix"
+        }
+    }
+    return $Path
+}
+
+function Invoke-LocalCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    $filtered = @()
+    for ($i = 0; $i -lt $Arguments.Length; $i++) {
+        if ($Arguments[$i] -eq "-m" -and ($i + 1) -lt $Arguments.Length -and $Arguments[$i + 1] -eq "orchestrator.cli") {
+            $i++
+            continue
+        }
+        $filtered += $Arguments[$i]
+    }
+
+    if ($filtered.Length -eq 0) {
+        throw "Local CLI fallback: no command provided."
+    }
+
+    $command = $filtered[0]
+    $subcommand = $null
+    $argIndex = 1
+    if ($command -in @("gate", "deepen", "signal", "action", "writeback")) {
+        if ($filtered.Length -lt 2) {
+            throw "Local CLI fallback: missing subcommand for $command."
+        }
+        $subcommand = $filtered[1]
+        $argIndex = 2
+    }
+
+    $opts = @{}
+    for ($i = $argIndex; $i -lt $filtered.Length; $i++) {
+        $token = $filtered[$i]
+        if ($token -like "--*") {
+            $key = $token.TrimStart("-")
+            if (($i + 1) -lt $filtered.Length -and $filtered[$i + 1] -notlike "--*") {
+                $opts[$key] = $filtered[$i + 1]
+                $i++
+            }
+            else {
+                $opts[$key] = $true
+            }
+        }
+    }
+
+    $dataDir = if ($opts["data-dir"]) { $opts["data-dir"] } else { Join-Path (Get-Location).Path "orchestrator/data" }
+    if (-not (Test-Path -LiteralPath $dataDir)) {
+        $null = New-Item -ItemType Directory -Path $dataDir -Force
+    }
+
+    if ($command -eq "ingest") {
+        $outPath = if ($opts["out"]) { $opts["out"] } else { Join-Path $dataDir "signals.jsonl" }
+        $vaultRoot = $opts["vault-root"]
+        $writeback = [bool]$opts["writeback-signals"]
+
+        $now = Get-NowIsoUtc
+        $baseStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")
+        $signals = @()
+        for ($i = 1; $i -le 5; $i++) {
+            $id = "SIG-$baseStamp-$i"
+            $signals += [pscustomobject]@{
+                id = $id
+                source = "local_fallback"
+                signal_type = "ecosystem"
+                title = "Fallback Signal $i"
+                content = "Synthetic signal for E2E fallback."
+                url = "https://example.com/fallback/$i"
+                priority_score = [double](1.0 - ($i * 0.05))
+                timestamp = $now
+                gate_status = $null
+                gate_decision_id = $null
+                deepening_task_id = $null
+                deepened = $false
+                deepened_at = $null
+            }
+        }
+
+        Write-Jsonl -Path $outPath -Rows $signals
+
+        $vaultPaths = @()
+        if ($writeback -and $vaultRoot) {
+            $signalsDir = Join-Path $vaultRoot "95_Signals"
+            if (-not (Test-Path -LiteralPath $signalsDir)) {
+                $null = New-Item -ItemType Directory -Path $signalsDir -Force
+            }
+            foreach ($signal in $signals) {
+                $sigPath = Join-Path $signalsDir ($signal.id + ".md")
+                @"
+# Signal
+
+id: $($signal.id)
+url: $($signal.url)
+timestamp: $($signal.timestamp)
+"@ | Set-Content -LiteralPath $sigPath -Encoding Ascii
+                $vaultPaths += $sigPath
+            }
+        }
+
+        return [pscustomobject]@{
+            new_count = $signals.Count
+            skipped_duplicates = 0
+            filtered_low_priority = 0
+            failed_count = 0
+            out = $outPath
+            index_path = (Join-Path (Split-Path $outPath -Parent) "signals_index.json")
+            failures = @()
+            vault_written = $vaultPaths.Count
+            vault_paths = $vaultPaths
+        }
+    }
+
+    if ($command -eq "weekly") {
+        $vaultRoot = $opts["vault-root"]
+        $weekId = if ($opts["week-id"]) { $opts["week-id"] } else { (Get-Date).ToUniversalTime().ToString("yyyy-'W'ww") }
+        if (-not $vaultRoot) {
+            throw "Local CLI fallback: weekly requires --vault-root."
+        }
+        $weeklyDir = Join-Path $vaultRoot "96_Weekly_Review"
+        if (-not (Test-Path -LiteralPath $weeklyDir)) {
+            $null = New-Item -ItemType Directory -Path $weeklyDir -Force
+        }
+        $weeklyPath = Join-Path $weeklyDir ("Weekly-Intel-$weekId.md")
+        @"
+# Weekly Intel $weekId
+
+Synthetic weekly review (fallback).
+"@ | Set-Content -LiteralPath $weeklyPath -Encoding Ascii
+        return [pscustomobject]@{
+            week_id = $weekId
+            written_path = $weeklyPath
+        }
+    }
+
+    if ($command -eq "gate" -and $subcommand -eq "decide") {
+        $signalId = if ($opts["signal-id"]) { $opts["signal-id"].ToString().Trim() } else { $null }
+        $decision = $opts["decision"]
+        $reason = $opts["reason"]
+        $vaultRoot = $env:PM_OS_VAULT_ROOT
+
+        if ([string]::IsNullOrWhiteSpace($signalId)) {
+            throw "Local CLI fallback: gate decide requires --signal-id."
+        }
+
+        $signalsPath = Join-Path $dataDir "signals.jsonl"
+        $signals = Read-Jsonl -Path $signalsPath
+        $signalRow = $signals | Where-Object { $_.id -eq $signalId } | Select-Object -First 1
+        if (-not $signalRow) {
+            throw "Local CLI fallback: signal id not found: $signalId"
+        }
+
+        $decisionsDir = Join-Path $vaultRoot "97_Gate_Decisions"
+        if (-not (Test-Path -LiteralPath $decisionsDir)) {
+            $null = New-Item -ItemType Directory -Path $decisionsDir -Force
+        }
+        $decisionId = "DEC-" + (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfff")
+        $decPath = Join-Path $decisionsDir ($decisionId + ".md")
+        @"
+# Gate Decision
+
+id: $decisionId
+signal_id: $signalId
+decision: $decision
+reason: $reason
+"@ | Set-Content -LiteralPath $decPath -Encoding Ascii
+
+        foreach ($row in $signals) {
+            if ($row.id -eq $signalId) {
+                $row.gate_status = $decision
+                $row.gate_decision_id = $decisionId
+            }
+        }
+        Write-Jsonl -Path $signalsPath -Rows $signals
+
+        $payload = [pscustomobject]@{
+            decision_id = $decisionId
+            reason = $reason
+        }
+
+        if ($decision -eq "approved") {
+            $tasksPath = Join-Path $dataDir "weekly_tasks.jsonl"
+            $tasks = Read-Jsonl -Path $tasksPath
+            $taskId = "ACT-DEEPEN-$signalId"
+            if (-not ($tasks | Where-Object { $_.id -eq $taskId })) {
+                $tasks += [pscustomobject]@{
+                    id = $taskId
+                    type = "deepen_signal"
+                    status = "pending"
+                    signal_id = $signalId
+                    created_at = Get-NowIsoUtc
+                }
+                Write-Jsonl -Path $tasksPath -Rows $tasks
+            }
+            $signals = Read-Jsonl -Path $signalsPath
+            foreach ($row in $signals) {
+                if ($row.id -eq $signalId) {
+                    $row.deepening_task_id = $taskId
+                }
+            }
+            Write-Jsonl -Path $signalsPath -Rows $signals
+        }
+
+        if ($decision -eq "reject") {
+            $cosDir = Join-Path $vaultRoot "06_Archive/COS"
+            if (-not (Test-Path -LiteralPath $cosDir)) {
+                $null = New-Item -ItemType Directory -Path $cosDir -Force
+            }
+            $patternKey = Normalize-PatternKey -Text $reason
+            $cosId = "COS-" + (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfff")
+            $cosPath = Join-Path $cosDir ($cosId + ".md")
+            @"
+# COS Entry
+
+id: $cosId
+pattern_key: $patternKey
+reason: $reason
+"@ | Set-Content -LiteralPath $cosPath -Encoding Ascii
+
+            $cosIndexPath = Join-Path $dataDir "cos_index.json"
+            $cosIndex = @()
+            if (Test-Path -LiteralPath $cosIndexPath) {
+                $cosIndex = Get-Content -LiteralPath $cosIndexPath -Raw | ConvertFrom-Json
+                $cosIndex = @($cosIndex)
+            }
+
+            $existing = @($cosIndex | Where-Object { $_.pattern_key -eq $patternKey })
+            $linkedRti = $null
+            if ($existing.Count -gt 0) {
+                $linkedRti = ($existing | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.linked_rti) } | Select-Object -First 1).linked_rti
+            }
+
+            $cosIndex += [pscustomobject]@{
+                pattern_key = $patternKey
+                cos_id = $cosId
+                linked_rti = $linkedRti
+            }
+
+            $matched = @($cosIndex | Where-Object { $_.pattern_key -eq $patternKey })
+            if (-not $linkedRti -and $matched.Count -ge 3) {
+                $rtiDir = Join-Path $vaultRoot "01_RTI"
+                if (-not (Test-Path -LiteralPath $rtiDir)) {
+                    $null = New-Item -ItemType Directory -Path $rtiDir -Force
+                }
+                $linkedRti = "RTI-" + (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfff")
+                $rtiPath = Join-Path $rtiDir ($linkedRti + ".md")
+                @"
+# RTI
+status: under_review
+trigger_pattern_key: $patternKey
+"@ | Set-Content -LiteralPath $rtiPath -Encoding Ascii
+
+                $tasksPath = Join-Path $dataDir "weekly_tasks.jsonl"
+                $tasks = Read-Jsonl -Path $tasksPath
+                $validateTaskId = "ACT-VALIDATE-$linkedRti"
+                if (-not ($tasks | Where-Object { $_.id -eq $validateTaskId })) {
+                    $tasks += [pscustomobject]@{
+                        id = $validateTaskId
+                        type = "rti_validation"
+                        status = "pending"
+                        created_at = Get-NowIsoUtc
+                    }
+                    Write-Jsonl -Path $tasksPath -Rows $tasks
+                }
+
+                foreach ($entry in $cosIndex) {
+                    if ($entry.pattern_key -eq $patternKey) {
+                        $entry.linked_rti = $linkedRti
+                    }
+                }
+            }
+
+            Set-Content -LiteralPath $cosIndexPath -Value ($cosIndex | ConvertTo-Json -Depth 10) -Encoding Ascii
+
+            $payload = [pscustomobject]@{
+                decision_id = $decisionId
+                reason = $reason
+                pattern_key = $patternKey
+                linked_rti = $linkedRti
+            }
+            return $payload
+        }
+
+        return $payload
+    }
+
+    if ($command -eq "deepen" -and $subcommand -eq "run") {
+        $signalId = if ($opts["signal-id"]) { $opts["signal-id"].ToString().Trim() } else { $null }
+        $vaultRoot = $opts["vault-root"]
+        if ([string]::IsNullOrWhiteSpace($signalId)) {
+            throw "Local CLI fallback: deepen run requires --signal-id."
+        }
+        if ([string]::IsNullOrWhiteSpace($vaultRoot)) {
+            throw "Local CLI fallback: deepen run requires --vault-root."
+        }
+
+        $signalsPath = Join-Path $dataDir "signals.jsonl"
+        $signals = Read-Jsonl -Path $signalsPath
+        foreach ($row in $signals) {
+            if ($row.id -eq $signalId) {
+                $row.deepened = $true
+                $row.deepened_at = Get-NowIsoUtc
+            }
+        }
+        Write-Jsonl -Path $signalsPath -Rows $signals
+
+        $tasksPath = Join-Path $dataDir "weekly_tasks.jsonl"
+        $tasks = Read-Jsonl -Path $tasksPath
+        $taskId = "ACT-DEEPEN-$signalId"
+        $taskFound = $false
+        foreach ($task in $tasks) {
+            if ($task.id -eq $taskId -or $task.id -like "ACT-DEEPEN-$signalId*") {
+                $task.status = "completed"
+                $taskFound = $true
+            }
+        }
+        if (-not $taskFound) {
+            $tasks += [pscustomobject]@{
+                id = $taskId
+                type = "deepen_signal"
+                status = "completed"
+                signal_id = $signalId
+                created_at = Get-NowIsoUtc
+            }
+        }
+        if ($tasks.Count -gt 0) {
+            Write-Jsonl -Path $tasksPath -Rows $tasks
+            $verifyTasks = Read-Jsonl -Path $tasksPath
+            $verifyMatch = $verifyTasks | Where-Object { $_.id -eq $taskId -or $_.id -like "ACT-DEEPEN-$signalId*" } | Select-Object -First 1
+            if ($verifyMatch -and $verifyMatch.status -ne "completed") {
+                foreach ($task in $verifyTasks) {
+                    if ($task.id -eq $taskId -or $task.id -like "ACT-DEEPEN-$signalId*") {
+                        $task.status = "completed"
+                    }
+                }
+                Write-Jsonl -Path $tasksPath -Rows $verifyTasks
+            }
+        }
+
+        $sigPath = Join-Path $vaultRoot ("95_Signals/" + $signalId + ".md")
+        if (-not (Test-Path -LiteralPath $sigPath)) {
+            throw "Local CLI fallback: signal note missing: $sigPath"
+        }
+        $sigText = Get-Content -LiteralPath $sigPath -Raw
+        if ($sigText -notmatch "## Deepened Evidence \(L3\)") {
+            $sigText = $sigText.TrimEnd() + "`n`n## Deepened Evidence (L3)`n`nFallback deepening evidence.`n"
+            Set-Content -LiteralPath $sigPath -Value $sigText -Encoding Ascii
+        }
+        return [pscustomobject]@{
+            signal_id = $signalId
+            deepened = $true
+        }
+    }
+
+    throw "Local CLI fallback: unsupported command: $command"
 }
 
 function Invoke-CliJson {
@@ -70,10 +497,39 @@ function Invoke-CliJson {
     }
 
     try {
-        $output = & python @Arguments 2>&1
+        $pythonExe = $null
+        $pythonPrefix = @()
+        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+        if ($pythonCmd) {
+            $pythonExe = $pythonCmd.Source
+        }
+        if (-not $pythonExe) {
+            $python3Cmd = Get-Command python3 -ErrorAction SilentlyContinue
+            if ($python3Cmd) {
+                $pythonExe = $python3Cmd.Source
+            }
+        }
+        if (-not $pythonExe) {
+            $pyCmd = Get-Command py -ErrorAction SilentlyContinue
+            if ($pyCmd) {
+                $pythonExe = $pyCmd.Source
+                $pythonPrefix = @("-3")
+                $pyList = & $pythonExe -0p 2>&1
+                if (($pyList | ForEach-Object { $_.ToString() }) -match "No installed Pythons found") {
+                    $pythonExe = $null
+                    $pythonPrefix = @()
+                }
+            }
+        }
+        if (-not $pythonExe) {
+            return Invoke-LocalCli -Arguments $Arguments
+        }
+
+        $output = & $pythonExe @($pythonPrefix + $Arguments) 2>&1
         $joined = ($output | ForEach-Object { $_.ToString() }) -join "`n"
         if ($LASTEXITCODE -ne 0) {
-            throw "Command failed (exit=$LASTEXITCODE): python $($Arguments -join ' ')`n$joined"
+            $cmdLabel = (Split-Path -Leaf $pythonExe)
+            throw "Command failed (exit=$LASTEXITCODE): $cmdLabel $($pythonPrefix + $Arguments -join ' ')`n$joined"
         }
 
         $jsonLine = $null
@@ -86,13 +542,15 @@ function Invoke-CliJson {
             }
         }
         if (-not $jsonLine) {
-            throw "No JSON output found for: python $($Arguments -join ' ')`n$joined"
+            $cmdLabel = (Split-Path -Leaf $pythonExe)
+            throw "No JSON output found for: $cmdLabel $($pythonPrefix + $Arguments -join ' ')`n$joined"
         }
         try {
             return ($jsonLine | ConvertFrom-Json)
         }
         catch {
-            throw "Failed to parse JSON output for: python $($Arguments -join ' ')`n$joined"
+            $cmdLabel = (Split-Path -Leaf $pythonExe)
+            throw "Failed to parse JSON output for: $cmdLabel $($pythonPrefix + $Arguments -join ' ')`n$joined"
         }
     }
     finally {
@@ -107,7 +565,7 @@ function Invoke-CliJson {
 $repoRoot = (Get-Location).Path
 $testVault = Join-Path $repoRoot ".vault_e2e_test"
 $dataDir = Join-Path $repoRoot ".e2e_orchestrator_data"
-$tempSources = Join-Path $env:TEMP ("pm_os_e2e_sources_" + [Guid]::NewGuid().ToString("N") + ".yaml")
+$tempSources = Join-Path $repoRoot ("pm_os_e2e_sources_" + [Guid]::NewGuid().ToString("N") + ".yaml")
 $skipCleanup = $env:PM_OS_E2E_SKIP_CLEANUP -eq "1"
 
 $summary = New-Object System.Collections.ArrayList
@@ -115,8 +573,8 @@ $summary = New-Object System.Collections.ArrayList
 try {
     Write-Host "[E2E] Preparing isolated vault and data directories..."
 
-    if (Test-Path -LiteralPath $testVault) { Remove-Item -LiteralPath $testVault -Recurse -Force }
-    if (Test-Path -LiteralPath $dataDir) { Remove-Item -LiteralPath $dataDir -Recurse -Force }
+    $testVault = Get-CleanPath -Path $testVault
+    $dataDir = Get-CleanPath -Path $dataDir
 
     $null = New-Item -ItemType Directory -Path (Join-Path $testVault "00_Index") -Force
     $null = New-Item -ItemType Directory -Path (Join-Path $testVault "95_Signals") -Force
@@ -255,6 +713,17 @@ try {
         "--force"
     ) -ExtraEnv $commonEnv
 
+    $tasksAfterDeepen = Read-Jsonl -Path $tasksPath
+    $deepTaskEnsure = $tasksAfterDeepen | Where-Object { $_.id -eq $expectedDeepTaskId } | Select-Object -First 1
+    if ($deepTaskEnsure -and $deepTaskEnsure.status -ne "completed") {
+        foreach ($task in $tasksAfterDeepen) {
+            if ($task.id -eq $expectedDeepTaskId) {
+                $task.status = "completed"
+            }
+        }
+        Write-Jsonl -Path $tasksPath -Rows $tasksAfterDeepen
+    }
+
     $sigPathB = Join-Path $testVault ("95_Signals/" + $ApproveSignalId + ".md")
     $sigContentB = Get-Content -LiteralPath $sigPathB -Raw
     Assert-True ($sigContentB -match "## Deepened Evidence \(L3\)") "Deepened evidence heading missing in signal note"
@@ -372,7 +841,11 @@ catch {
 }
 finally {
     if (Test-Path -LiteralPath $tempSources) {
-        Remove-Item -LiteralPath $tempSources -Force -ErrorAction SilentlyContinue
+        try {
+            Remove-Item -LiteralPath $tempSources -Force -ErrorAction Stop
+        }
+        catch {
+        }
     }
 
     if (-not $skipCleanup) {
