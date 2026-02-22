@@ -198,6 +198,9 @@ def test_cli_gate_decide_generates_default_actions(tmp_path, capsys, monkeypatch
     payload = json.loads(capsys.readouterr().out)
     assert payload["decision_id"].startswith("DEC-")
     assert payload["next_actions"] == ["Deepen evidence (L3 full fetch)", "Draft LTI insight note"]
+    assert payload["deepening_task_created"] is True
+    assert payload["deepening_task_id"] == f"ACT-DEEPEN-{signal_payload['id']}"
+    assert payload["signal_updated"] is True
 
 
 def test_cli_gate_decide_rejects_overwrite(tmp_path, monkeypatch) -> None:

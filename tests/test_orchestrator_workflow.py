@@ -94,3 +94,71 @@ def test_generate_action_fails_without_signals(tmp_path) -> None:
         assert "No signals found" in str(exc)
     else:
         raise AssertionError("Expected ValueError when no signals exist")
+
+
+def test_gate_approved_creates_deepening_task_and_updates_signal(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    signal = orchestrator.add_signal(
+        source="manual",
+        signal_type="capability",
+        title="Deepen me",
+        content="Long form evidence preview",
+    )
+
+    payload = orchestrator.create_gate_decision(signal_id=signal.id, decision="approved", priority="High")
+
+    assert payload["deepening_task_created"] is True
+    assert payload["deepening_task_id"] == f"ACT-DEEPEN-{signal.id}"
+    assert payload["signal_updated"] is True
+
+    tasks = orchestrator.tasks.read_all()
+    assert len(tasks) == 1
+    assert tasks[0]["id"] == f"ACT-DEEPEN-{signal.id}"
+    assert tasks[0]["type"] == "deepening"
+    assert tasks[0]["signal_id"] == signal.id
+    assert tasks[0]["auto_generated"] is True
+
+    signals = orchestrator.signals.read_all()
+    assert signals[0]["gate_status"] == "approved"
+    assert signals[0]["gate_decision_id"] == payload["decision_id"]
+    assert signals[0]["deepening_task_id"] == f"ACT-DEEPEN-{signal.id}"
+
+
+def test_gate_duplicate_approved_is_idempotent(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    signal = orchestrator.add_signal(source="manual", signal_type="capability", title="Deepen me")
+
+    first = orchestrator.create_gate_decision(signal_id=signal.id, decision="approved", priority="High")
+    second = orchestrator.create_gate_decision(signal_id=signal.id, decision="approved", priority="High")
+
+    tasks = orchestrator.tasks.read_all()
+    assert len(tasks) == 1
+    assert first["deepening_task_id"] == second["deepening_task_id"]
+    assert second["deepening_task_created"] is False
+    assert second["signal_updated"] is False
+
+    signals = orchestrator.signals.read_all()
+    assert signals[0]["gate_decision_id"] == first["decision_id"]
+
+
+def test_gate_non_approved_does_not_create_deepening_task(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    signal = orchestrator.add_signal(source="manual", signal_type="market", title="Maybe later")
+    payload = orchestrator.create_gate_decision(signal_id=signal.id, decision="deferred", priority="Low")
+
+    assert payload["deepening_task_created"] is False
+    assert payload["deepening_task_id"] is None
+    assert payload["signal_updated"] is False
+    assert orchestrator.tasks.read_all() == []
+
+    signal_row = orchestrator.signals.read_all()[0]
+    assert "gate_status" not in signal_row
