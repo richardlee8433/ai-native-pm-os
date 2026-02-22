@@ -104,6 +104,15 @@ def build_parser() -> argparse.ArgumentParser:
     gate_decide.add_argument("--reason")
     gate_decide.add_argument("--next-actions", action="append", default=[])
 
+    deepen_parser = subparsers.add_parser("deepen")
+    deepen_sub = deepen_parser.add_subparsers(dest="deepen_command", required=True)
+    deepen_run = deepen_sub.add_parser("run")
+    deepen_run.add_argument("--limit", type=int, default=5)
+    deepen_run.add_argument("--only-pending", action=argparse.BooleanOptionalAction, default=True)
+    deepen_run.add_argument("--force", action="store_true", default=False)
+    deepen_run.add_argument("--signal-id")
+    deepen_run.add_argument("--vault-root")
+
     return parser
 
 
@@ -249,6 +258,17 @@ def main(argv: list[str] | None = None) -> int:
             priority=args.priority,
             reason=args.reason,
             next_actions=args.next_actions,
+        )
+        print(json.dumps(payload))
+        return 0
+
+    if args.command == "deepen" and args.deepen_command == "run":
+        payload = orchestrator.run_deepening(
+            limit=args.limit,
+            only_pending=args.only_pending,
+            force=args.force,
+            signal_id=args.signal_id,
+            vault_root=args.vault_root,
         )
         print(json.dumps(payload))
         return 0

@@ -3,13 +3,19 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import hashlib
+import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Callable
+
+from urllib import request as urllib_request
+from urllib.error import HTTPError, URLError
 
 from pm_os_contracts.models import ACTION_TASK, LTI_NODE, RTI_NODE, SIGNAL
 
 from orchestrator.storage import JSONLStorage
-from orchestrator.vault_ops import _excerpt, write_gate_decision, write_lti_markdown, write_rti_markdown
+from orchestrator.vault_ops import _excerpt, write_gate_decision, write_lti_markdown, write_rti_markdown, write_signal_markdown
 
 DEFAULT_NEXT_ACTIONS = {
     "approved": ["Deepen evidence (L3 full fetch)", "Draft LTI insight note"],
@@ -38,6 +44,223 @@ class Orchestrator:
         self.lti_nodes = JSONLStorage(self.data_dir / "lti_nodes.jsonl")
         self.rti_nodes = JSONLStorage(self.data_dir / "rti_nodes.jsonl")
         self.decision_index_path = self.data_dir / "decision_index.json"
+
+    def run_deepening(
+        self,
+        *,
+        limit: int = 5,
+        only_pending: bool = True,
+        force: bool = False,
+        signal_id: str | None = None,
+        vault_root: str | None = None,
+    ) -> dict[str, Any]:
+        resolved_vault_root = Path(vault_root) if vault_root else self.vault_root
+        now = self.now_provider().replace(microsecond=0)
+        now_iso = now.isoformat()
+
+        tasks = self.tasks.read_all()
+        signals = self.signals.read_all()
+        signals_by_id = {row.get("id"): row for row in signals if isinstance(row.get("id"), str)}
+
+        report = {"processed": 0, "completed": 0, "failed": 0, "skipped": 0, "results": []}
+        matched = 0
+
+        for task in tasks:
+            if task.get("type") != "deepening":
+                continue
+            task_signal_id = task.get("signal_id")
+            if signal_id and task_signal_id != signal_id:
+                continue
+            if not isinstance(task_signal_id, str):
+                report["skipped"] += 1
+                report["results"].append({"signal_id": None, "task_id": task.get("id"), "status": "skipped", "reason": "missing signal_id"})
+                continue
+
+            status = task.get("status")
+            if only_pending and not force and status != "pending":
+                report["skipped"] += 1
+                report["results"].append({"signal_id": task_signal_id, "task_id": task.get("id"), "status": "skipped", "reason": f"status={status}"})
+                continue
+            if not force and status == "completed":
+                report["skipped"] += 1
+                report["results"].append({"signal_id": task_signal_id, "task_id": task.get("id"), "status": "skipped", "reason": "already completed"})
+                continue
+            if matched >= limit:
+                break
+            matched += 1
+            report["processed"] += 1
+
+            signal_row = signals_by_id.get(task_signal_id)
+            if signal_row is None:
+                task["status"] = "failed"
+                task["error"] = f"Signal not found: {task_signal_id}"
+                task["completed_at"] = now_iso
+                report["failed"] += 1
+                report["results"].append({"signal_id": task_signal_id, "task_id": task.get("id"), "status": "failed", "error": task["error"]})
+                continue
+
+            evidence = self._fetch_evidence(signal_row)
+            sig_path = resolved_vault_root / "95_Signals" / f"{task_signal_id}.md"
+            if not sig_path.exists():
+                write_signal_markdown(resolved_vault_root, signal_row)
+
+            updated = self._append_deepened_evidence(
+                sig_path=sig_path,
+                source_url=signal_row.get("url"),
+                task_id=task.get("id"),
+                captured_at=now_iso,
+                fetch_status=evidence["fetch_status"],
+                excerpt=evidence["evidence_excerpt"],
+            )
+
+            if evidence["fetch_status"] == "ok":
+                task["status"] = "completed"
+                task["completed_at"] = now_iso
+                task.pop("error", None)
+                signal_row["deepened"] = True
+                signal_row["deepened_at"] = now_iso
+                signal_row["evidence_source_url"] = signal_row.get("url")
+                signal_row["evidence_hash"] = evidence["evidence_hash"]
+                report["completed"] += 1
+                row_status = "completed"
+            else:
+                task["status"] = "failed"
+                task["completed_at"] = now_iso
+                task["error"] = evidence.get("error") or "fetch failed"
+                signal_row["deepened"] = False
+                report["failed"] += 1
+                row_status = "failed"
+
+            report["results"].append(
+                {
+                    "signal_id": task_signal_id,
+                    "task_id": task.get("id"),
+                    "status": row_status if updated else "skipped",
+                    "sig_path": str(sig_path),
+                }
+            )
+
+        self.tasks.rewrite_all(tasks)
+        self.signals.rewrite_all(signals)
+        return report
+
+    def _fetch_evidence(self, signal_row: dict[str, Any]) -> dict[str, str]:
+        url = signal_row.get("url")
+        fallback = _excerpt(signal_row.get("content"), limit=2500)
+        if not isinstance(url, str) or not url:
+            return {
+                "fetch_status": "failed",
+                "error": "missing source url",
+                "evidence_excerpt": fallback,
+                "evidence_hash": hashlib.sha1(fallback.encode("utf-8")).hexdigest(),
+            }
+
+        try:
+            if "arxiv.org" in url:
+                excerpt = self._fetch_arxiv_evidence(url) or fallback
+            else:
+                excerpt = self._fetch_html_evidence(url)
+            if not excerpt:
+                excerpt = fallback
+            excerpt = " ".join(excerpt.split())[:3000]
+            return {
+                "fetch_status": "ok",
+                "evidence_excerpt": excerpt,
+                "evidence_hash": hashlib.sha1(excerpt.encode("utf-8")).hexdigest(),
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "fetch_status": "failed",
+                "error": str(exc),
+                "evidence_excerpt": fallback,
+                "evidence_hash": hashlib.sha1(fallback.encode("utf-8")).hexdigest(),
+            }
+
+    def _fetch_html_evidence(self, url: str) -> str:
+        response = self._http_get(url)
+        text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", response, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", " ", text)
+        return text
+
+    def _fetch_arxiv_evidence(self, url: str) -> str:
+        arxiv_id = url.rstrip("/").split("/")[-1]
+        if not arxiv_id:
+            return ""
+        api_url = f"http://export.arxiv.org/api/query?id_list={arxiv_id}"
+        response = self._http_get(api_url)
+        root = ET.fromstring(response)
+        ns = {"atom": "http://www.w3.org/2005/Atom"}
+        entry = root.find("atom:entry", ns)
+        if entry is None:
+            return ""
+        title = (entry.findtext("atom:title", default="", namespaces=ns) or "").strip()
+        summary = (entry.findtext("atom:summary", default="", namespaces=ns) or "").strip()
+        return f"{title}\n\n{summary}".strip()
+
+
+    def _http_get(self, url: str) -> str:
+        req = urllib_request.Request(url, headers={"User-Agent": "PM-OS-Orchestrator/3.0 (+https://example.local)"})
+        try:
+            with urllib_request.urlopen(req, timeout=15) as resp:
+                status = getattr(resp, "status", 200)
+                if status != 200:
+                    raise ValueError(f"http status {status}")
+                return resp.read().decode("utf-8", errors="ignore")
+        except HTTPError as exc:
+            raise ValueError(f"http status {exc.code}") from exc
+        except URLError as exc:
+            raise ValueError(str(exc.reason)) from exc
+
+    def _append_deepened_evidence(
+        self,
+        *,
+        sig_path: Path,
+        source_url: str | None,
+        task_id: str | None,
+        captured_at: str,
+        fetch_status: str,
+        excerpt: str,
+    ) -> bool:
+        content = sig_path.read_text(encoding="utf-8")
+        if "## Deepened Evidence (L3)" in content and isinstance(source_url, str) and f"- source_url: {source_url}" in content:
+            return False
+
+        lines = [
+            "",
+            "## Deepened Evidence (L3)",
+            f"- captured_at: {captured_at}",
+            f"- source_url: {source_url or ''}",
+            f"- fetch_status: {fetch_status}",
+            "- evidence_excerpt:",
+            f"  {excerpt}",
+        ]
+        updated = content.rstrip() + "\n" + "\n".join(lines) + "\n"
+        updated = self._upsert_frontmatter(updated, captured_at=captured_at, task_id=task_id)
+        sig_path.write_text(updated, encoding="utf-8")
+        return True
+
+    def _upsert_frontmatter(self, markdown: str, *, captured_at: str, task_id: str | None) -> str:
+        if not markdown.startswith("---\n"):
+            return markdown
+        end_idx = markdown.find("\n---\n", 4)
+        if end_idx == -1:
+            return markdown
+
+        frontmatter = markdown[4:end_idx]
+        body = markdown[end_idx + 5 :]
+        updates = {
+            "deepened": "true",
+            "deepened_at": captured_at,
+            "deepening_task_id": task_id or "",
+        }
+        for key, value in updates.items():
+            pattern = re.compile(rf"^{re.escape(key)}:\s*.*$", flags=re.MULTILINE)
+            line = f"{key}: {value}"
+            if pattern.search(frontmatter):
+                frontmatter = pattern.sub(line, frontmatter)
+            else:
+                frontmatter += f"\n{line}"
+        return f"---\n{frontmatter}\n---\n{body}"
 
     def add_signal(
         self,
