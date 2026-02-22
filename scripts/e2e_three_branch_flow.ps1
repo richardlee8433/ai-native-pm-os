@@ -135,8 +135,8 @@ sources:
     Write-Host "[E2E] Step 1: ingest"
     $ingest = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "--data-dir", $dataDir,
         "ingest",
+        "--data-dir", $dataDir,
         "--sources", $tempSources,
         "--since-days", "3650",
         "--limit-per-source", "5",
@@ -153,8 +153,8 @@ sources:
     Write-Host "[E2E] Step 2: weekly"
     $weekly = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "--data-dir", $dataDir,
         "weekly",
+        "--data-dir", $dataDir,
         "--vault-root", $testVault,
         "--limit", "3"
     ) -ExtraEnv $commonEnv
@@ -189,8 +189,8 @@ sources:
 
     $branchA = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "--data-dir", $dataDir,
         "gate", "decide",
+        "--data-dir", $dataDir,
         "--signal-id", $TopSignalId,
         "--decision", "deferred",
         "--priority", "Medium",
@@ -220,8 +220,8 @@ sources:
     $decBeforeB = $decAfterA
     $branchB = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "--data-dir", $dataDir,
         "gate", "decide",
+        "--data-dir", $dataDir,
         "--signal-id", $ApproveSignalId,
         "--decision", "approved",
         "--priority", "High",
@@ -243,8 +243,8 @@ sources:
 
     $deepen = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "--data-dir", $dataDir,
         "deepen", "run",
+        "--data-dir", $dataDir,
         "--signal-id", $ApproveSignalId,
         "--vault-root", $testVault,
         "--force"
@@ -279,8 +279,8 @@ sources:
 
         $rejectPayload = Invoke-CliJson -Arguments @(
             "-m", "orchestrator.cli",
-            "--data-dir", $dataDir,
             "gate", "decide",
+            "--data-dir", $dataDir,
             "--signal-id", $RejectSignalId,
             "--decision", "reject",
             "--priority", "Low",
@@ -331,8 +331,8 @@ sources:
 
     $reject4 = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "--data-dir", $dataDir,
         "gate", "decide",
+        "--data-dir", $dataDir,
         "--signal-id", $RejectSignalId,
         "--decision", "reject",
         "--priority", "Low",
