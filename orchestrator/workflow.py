@@ -226,12 +226,68 @@ class Orchestrator:
         index_rows.append(index_entry)
         self._write_decision_index(index_rows)
 
+        deepening_task_created = False
+        deepening_task_id: str | None = None
+        signal_updated = False
+
+        if decision == "approved":
+            deepening_task_id = self._find_existing_deepening_task_id(signal.id)
+            if deepening_task_id is None:
+                deepening_task_id = f"ACT-DEEPEN-{signal.id}"
+                self.tasks.append(
+                    {
+                        "id": deepening_task_id,
+                        "type": "deepening",
+                        "signal_id": signal.id,
+                        "goal": f"Fetch full evidence for signal {signal.id}",
+                        "context": _excerpt(signal.content, limit=280) or signal.title or signal.id,
+                        "status": "pending",
+                        "created_at": now.isoformat(),
+                        "auto_generated": True,
+                    }
+                )
+                deepening_task_created = True
+
+            signal_rows = self.signals.read_all()
+            for row in signal_rows:
+                if row.get("id") != signal.id:
+                    continue
+                if row.get("gate_status") == "approved":
+                    break
+                row["gate_status"] = "approved"
+                row["gate_decision_id"] = decision_id
+                row["deepening_task_id"] = deepening_task_id
+                self.signals.rewrite_all(signal_rows)
+                signal_updated = True
+                break
+
         return {
             **index_entry,
             "reason": resolved_reason,
             "next_actions": resolved_actions,
             "written_path": str(written_path),
+            "deepening_task_created": deepening_task_created,
+            "deepening_task_id": deepening_task_id,
+            "signal_updated": signal_updated,
         }
+
+    def _find_existing_deepening_task_id(self, signal_id: str) -> str | None:
+        for task in self.tasks.read_all():
+            task_id = task.get("id")
+            if not isinstance(task_id, str):
+                continue
+            if task_id == f"ACT-DEEPEN-{signal_id}":
+                return task_id
+            if task.get("type") == "deepening" and task.get("signal_id") == signal_id:
+                return task_id
+
+        for row in self.signals.read_all():
+            if row.get("id") != signal_id:
+                continue
+            deepening_task_id = row.get("deepening_task_id")
+            if isinstance(deepening_task_id, str):
+                return deepening_task_id
+        return None
 
     def _existing_lti_id_for_action(self, action_id: str) -> str | None:
         for writeback in reversed(self.writebacks.read_all()):
