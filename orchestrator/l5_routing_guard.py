@@ -53,11 +53,19 @@ def route_after_gate_decision(decision_id: str, data_dir: Path, vault_dir: Path)
     return created
 
 
-def check_rule_of_three_and_propose_rti(pattern_id: str, data_dir: Path, vault_dir: Path) -> str | None:
-    cos_index_path = data_dir / "cos_index.json"
-    if not cos_index_path.exists():
-        return None
-    cos_index = json.loads(cos_index_path.read_text(encoding="utf-8"))
+def check_rule_of_three_and_propose_rti(
+    pattern_id: str,
+    data_dir: Path,
+    vault_dir: Path,
+    *,
+    cos_index: list[dict[str, Any]] | None = None,
+    now_iso: str | None = None,
+) -> str | None:
+    if cos_index is None:
+        cos_index_path = data_dir / "cos_index.json"
+        if not cos_index_path.exists():
+            return None
+        cos_index = json.loads(cos_index_path.read_text(encoding="utf-8"))
     matches = [entry for entry in cos_index if entry.get("pattern_key") == pattern_id]
     if len(matches) < 3:
         return None
@@ -67,7 +75,7 @@ def check_rule_of_three_and_propose_rti(pattern_id: str, data_dir: Path, vault_d
     if existing:
         return existing["id"]
 
-    proposal = _create_rti_proposal(pattern_id, matches, data_dir, vault_dir)
+    proposal = _create_rti_proposal(pattern_id, matches, data_dir, vault_dir, now_iso=now_iso)
     return proposal["id"]
 
 
@@ -248,10 +256,17 @@ def _ensure_lti_draft(decision: L4Decision, data_dir: Path, vault_dir: Path) -> 
     return record
 
 
-def _create_rti_proposal(pattern_id: str, matches: list[dict[str, Any]], data_dir: Path, vault_dir: Path) -> dict[str, Any]:
+def _create_rti_proposal(
+    pattern_id: str,
+    matches: list[dict[str, Any]],
+    data_dir: Path,
+    vault_dir: Path,
+    *,
+    now_iso: str | None = None,
+) -> dict[str, Any]:
     store = _rti_store(data_dir)
     proposals = store.read_all()
-    now = _utc_now()
+    now = now_iso or _utc_now()
     proposal_id, proposal_path = _reserve_unique_path("RTI-PROP", now, proposals, vault_dir / RTI_PROPOSALS_DIR)
     supporting_ids = [entry.get("cos_id") for entry in matches if entry.get("cos_id")]
 
