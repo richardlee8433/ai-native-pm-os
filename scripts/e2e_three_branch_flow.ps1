@@ -715,14 +715,7 @@ try {
 
     $tasksAfterDeepen = Read-Jsonl -Path $tasksPath
     $deepTaskEnsure = $tasksAfterDeepen | Where-Object { $_.id -eq $expectedDeepTaskId } | Select-Object -First 1
-    if ($deepTaskEnsure -and $deepTaskEnsure.status -ne "completed") {
-        foreach ($task in $tasksAfterDeepen) {
-            if ($task.id -eq $expectedDeepTaskId) {
-                $task.status = "completed"
-            }
-        }
-        Write-Jsonl -Path $tasksPath -Rows $tasksAfterDeepen
-    }
+    
 
     $sigPathB = Join-Path $testVault ("95_Signals/" + $ApproveSignalId + ".md")
     $sigContentB = Get-Content -LiteralPath $sigPathB -Raw
