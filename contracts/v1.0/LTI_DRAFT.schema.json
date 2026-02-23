@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "source_signal_id",
+    "source_decision_id",
+    "status",
+    "created_at",
+    "updated_at",
+    "vault_path",
+    "title",
+    "summary"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^LTI-DRAFT-[0-9]{8}-[0-9]{3}$"},
+    "type": {"type": "string", "enum": ["lti_draft"]},
+    "source_signal_id": {"type": "string"},
+    "source_decision_id": {"type": "string"},
+    "status": {"type": "string", "enum": ["draft", "published", "rejected"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "rejected_at": {"type": "string", "format": "date-time"},
+    "vault_path": {"type": "string"},
+    "final_vault_path": {"type": ["string", "null"]},
+    "title": {"type": "string"},
+    "summary": {"type": "string"},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "ref"],
+        "properties": {
+          "kind": {"type": "string", "enum": ["url", "arxiv", "file"]},
+          "ref": {"type": "string"}
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "properties": {
+        "reviewer": {"type": ["string", "null"]},
+        "review_notes": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

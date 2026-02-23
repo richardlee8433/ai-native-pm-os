@@ -1748,6 +1748,23 @@ python -m orchestrator.cli --data-dir orchestrator/data reject-rti --id RTI-PROP
 python -m orchestrator.cli --data-dir orchestrator/data rule-of-three --pattern-id FP-TEST-001 --vault-dir <vault_root>
 ```
 
+
+### End-to-End Three-Branch Flow (Cross-Platform)
+
+Use the Python runner (works on Linux/macOS/Windows; no PowerShell dependency):
+
+```bash
+python scripts/e2e_three_branch_flow.py --offline
+```
+
+PowerShell wrapper (Windows) still exists and forwards to Python:
+
+```powershell
+.\scripts\e2e_three_branch_flow.ps1 -Offline
+```
+
+Set `E2E_OFFLINE=1` to force offline mode without CLI flags.
+
 ## Weekly Task Scheduler Snippet (Layer 1 Intake)
 
 Use Windows Task Scheduler to run weekly Layer-1 signal intake on **Monday 09:10**.
