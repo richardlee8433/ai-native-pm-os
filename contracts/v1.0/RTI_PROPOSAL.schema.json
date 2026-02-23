@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "status",
+    "pattern_id",
+    "supporting_cos_case_ids",
+    "created_at",
+    "updated_at",
+    "vault_path",
+    "hypothesis_update",
+    "proposed_change",
+    "rollback_plan"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^RTI-PROP-[0-9]{8}-[0-9]{3}$"},
+    "type": {"type": "string", "enum": ["rti_proposal"]},
+    "status": {"type": "string", "enum": ["draft", "published", "rejected"]},
+    "pattern_id": {"type": "string"},
+    "supporting_cos_case_ids": {"type": "array", "items": {"type": "string"}},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "rejected_at": {"type": "string", "format": "date-time"},
+    "vault_path": {"type": "string"},
+    "final_vault_path": {"type": ["string", "null"]},
+    "hypothesis_update": {"type": "string"},
+    "proposed_change": {"type": "string"},
+    "rollback_plan": {"type": "string"},
+    "reviewer": {"type": ["string", "null"]},
+    "review_notes": {"type": ["string", "null"]}
+  }
+}

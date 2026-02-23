@@ -14,6 +14,8 @@ EXPECTED_SCHEMAS = {
     "LTI_NODE.schema.json",
     "COS_CASE.schema.json",
     "RTI_NODE.schema.json",
+    "LTI_DRAFT.schema.json",
+    "RTI_PROPOSAL.schema.json",
     "LPL_POST.schema.json",
     "ECHO_METRICS.schema.json",
 }
