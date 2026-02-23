@@ -598,8 +598,8 @@ try {
     Write-Host "[E2E] Step 1: ingest"
     $ingest = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "ingest",
         "--data-dir", $dataDir,
+        "ingest",
         "--sources", $tempSources,
         "--since-days", "3650",
         "--limit-per-source", "5",
@@ -616,8 +616,8 @@ try {
     Write-Host "[E2E] Step 2: weekly"
     $weekly = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "weekly",
         "--data-dir", $dataDir,
+        "weekly",
         "--vault-root", $testVault,
         "--limit", "3"
     ) -ExtraEnv $commonEnv
@@ -652,8 +652,8 @@ try {
 
     $branchA = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "gate", "decide",
         "--data-dir", $dataDir,
+        "gate", "decide",
         "--signal-id", $TopSignalId,
         "--decision", "deferred",
         "--priority", "Medium",
@@ -683,8 +683,8 @@ try {
     $decBeforeB = $decAfterA
     $branchB = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "gate", "decide",
         "--data-dir", $dataDir,
+        "gate", "decide",
         "--signal-id", $ApproveSignalId,
         "--decision", "approved",
         "--priority", "High",
@@ -706,8 +706,8 @@ try {
 
     $deepen = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "deepen", "run",
         "--data-dir", $dataDir,
+        "deepen", "run",
         "--signal-id", $ApproveSignalId,
         "--vault-root", $testVault,
         "--force"
@@ -746,8 +746,8 @@ try {
 
         $rejectPayload = Invoke-CliJson -Arguments @(
             "-m", "orchestrator.cli",
-            "gate", "decide",
             "--data-dir", $dataDir,
+            "gate", "decide",
             "--signal-id", $RejectSignalId,
             "--decision", "reject",
             "--priority", "Low",
@@ -798,8 +798,8 @@ try {
 
     $reject4 = Invoke-CliJson -Arguments @(
         "-m", "orchestrator.cli",
-        "gate", "decide",
         "--data-dir", $dataDir,
+        "gate", "decide",
         "--signal-id", $RejectSignalId,
         "--decision", "reject",
         "--priority", "Low",
