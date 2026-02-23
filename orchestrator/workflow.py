@@ -597,7 +597,13 @@ class Orchestrator:
         if isinstance(linked_existing, str):
             return {"linked_rti_proposal": linked_existing, "rti_triggered": False}
 
-        proposal_id = check_rule_of_three_and_propose_rti(pattern_key, self.data_dir, self.vault_root)
+        proposal_id = check_rule_of_three_and_propose_rti(
+            pattern_key,
+            self.data_dir,
+            self.vault_root,
+            cos_index=cos_index,
+            now_iso=now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        )
         if not proposal_id:
             return {"linked_rti_proposal": None, "rti_triggered": False}
 
