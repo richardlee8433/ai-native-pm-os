@@ -105,6 +105,35 @@ class LTI_NODE(ContractBaseModel):
     revision_history: list[RevisionHistoryEntry] | None = None
 
 
+class EvidenceRef(ContractBaseModel):
+    kind: Literal["url", "arxiv", "file"]
+    ref: str
+
+
+class GovernanceReview(ContractBaseModel):
+    reviewer: str | None = None
+    review_notes: str | None = None
+
+
+class LTI_DRAFT(ContractBaseModel):
+    id: str = Field(pattern=r"^LTI-DRAFT-[0-9]{8}-[0-9]{3}$")
+    type: Literal["lti_draft"]
+    source_signal_id: str
+    source_decision_id: str
+    status: Literal["draft", "published", "rejected"]
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    published_at: dt.datetime | None = None
+    rejected_at: dt.datetime | None = None
+    vault_path: str
+    final_vault_path: str | None = None
+    title: str
+    summary: str
+    tags: list[str] | None = None
+    evidence_refs: list[EvidenceRef] | None = None
+    governance: GovernanceReview | None = None
+
+
 class COS_CASE(ContractBaseModel):
     id: str = Field(pattern=r"^COS-[0-9]{8}-[0-9]{3}$")
     task_id: str
@@ -128,6 +157,25 @@ class RTI_NODE(ContractBaseModel):
     linked_cos_patterns: list[str] | None = None
     revision_trigger_count: int = Field(default=0, ge=0)
     last_validated: dt.date | None = None
+
+
+class RTI_PROPOSAL(ContractBaseModel):
+    id: str = Field(pattern=r"^RTI-PROP-[0-9]{8}-[0-9]{3}$")
+    type: Literal["rti_proposal"]
+    status: Literal["draft", "published", "rejected"]
+    pattern_id: str
+    supporting_cos_case_ids: list[str]
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    published_at: dt.datetime | None = None
+    rejected_at: dt.datetime | None = None
+    vault_path: str
+    final_vault_path: str | None = None
+    hypothesis_update: str
+    proposed_change: str
+    rollback_plan: str
+    reviewer: str | None = None
+    review_notes: str | None = None
 
 
 class EngagementStats(ContractBaseModel):
@@ -176,6 +224,8 @@ CONTRACT_MODEL_MAP: dict[str, type[ContractBaseModel]] = {
     "LTI_NODE": LTI_NODE,
     "COS_CASE": COS_CASE,
     "RTI_NODE": RTI_NODE,
+    "LTI_DRAFT": LTI_DRAFT,
+    "RTI_PROPOSAL": RTI_PROPOSAL,
     "LPL_POST": LPL_POST,
     "ECHO_METRICS": ECHO_METRICS,
 }

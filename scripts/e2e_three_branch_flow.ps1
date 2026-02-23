@@ -731,6 +731,40 @@ try {
     Assert-True (-not [string]::IsNullOrWhiteSpace([string]$approveRowDeep.deepened_at)) "Signal deepened_at should be set"
     $null = $summary.Add("PASS: Branch B approved + deepen assertions")
 
+    Write-Host "[E2E] L5: route-after-gate + publish-lti"
+    $route = Invoke-CliJson -Arguments @(
+        "-m", "orchestrator.cli",
+        "--data-dir", $dataDir,
+        "route-after-gate",
+        "--decision-id", $branchB.decision_id,
+        "--vault-dir", $testVault
+    ) -ExtraEnv $commonEnv
+
+    $l5DataDir = Join-Path $dataDir "test_data"
+    $ltiDraftsPath = Join-Path $l5DataDir "lti_drafts.jsonl"
+    $ltiDrafts = Read-Jsonl -Path $ltiDraftsPath
+    $draft = $ltiDrafts | Where-Object { $_.source_decision_id -eq $branchB.decision_id } | Select-Object -First 1
+    Assert-True ($null -ne $draft) "L5 should create LTI draft for approved decision"
+    $draftPath = Join-Path $testVault ([string]$draft.vault_path)
+    Assert-True (Test-Path -LiteralPath $draftPath) "LTI draft markdown should exist"
+
+    $publish = Invoke-CliJson -Arguments @(
+        "-m", "orchestrator.cli",
+        "--data-dir", $dataDir,
+        "publish-lti",
+        "--id", $draft.id,
+        "--reviewer", "E2E",
+        "--notes", "E2E publish",
+        "--vault-dir", $testVault
+    ) -ExtraEnv $commonEnv
+
+    $ltiDrafts = Read-Jsonl -Path $ltiDraftsPath
+    $draftAfter = $ltiDrafts | Where-Object { $_.id -eq $draft.id } | Select-Object -First 1
+    Assert-Equal "published" ([string]$draftAfter.status) "LTI draft should be published"
+    $finalPath = Join-Path $testVault ([string]$draftAfter.final_vault_path)
+    Assert-True (Test-Path -LiteralPath $finalPath) "Published LTI file should exist in 02_LTI"
+    $null = $summary.Add("PASS: L5 route + publish LTI")
+
     Write-Host "[E2E] Branch C: REJECT x3 + Rule-of-Three"
     $rejectReason = "E2E reject pattern: auth boundary"
     $cosDir = Join-Path $testVault "06_Archive/COS"

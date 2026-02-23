@@ -31,7 +31,7 @@ def _add_rejected(orchestrator: Orchestrator, *, suffix: str) -> dict[str, str]:
     )
 
 
-def test_rule_of_three_sets_rti_under_review_and_creates_validation_task(tmp_path, monkeypatch) -> None:
+def test_rule_of_three_sets_rti_proposal_and_creates_validation_task(tmp_path, monkeypatch) -> None:
     now = FakeNow(dt.datetime(2026, 2, 17, 9, 0, 0, tzinfo=dt.timezone.utc))
     vault_root = tmp_path / "vault"
     monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
@@ -44,23 +44,23 @@ def test_rule_of_three_sets_rti_under_review_and_creates_validation_task(tmp_pat
     assert first["rti_triggered"] is False
     assert second["rti_triggered"] is False
     assert third["rti_triggered"] is True
-    assert third["linked_rti"].startswith("RTI-20260217-")
+    assert third["linked_rti_proposal"].startswith("RTI-PROP-20260217-")
 
-    rti_path = vault_root / "01_RTI" / f"{third['linked_rti']}.md"
-    assert rti_path.exists()
-    rti_text = rti_path.read_text(encoding="utf-8")
-    assert "status: under_review" in rti_text
-    assert "trigger_reason: Rule of Three" in rti_text
+    proposal_path = vault_root / "97_Decisions" / "_RTI_Proposals" / f"{third['linked_rti_proposal']}.md"
+    assert proposal_path.exists()
+    proposal_text = proposal_path.read_text(encoding="utf-8")
+    assert "status: draft" in proposal_text
+    assert "Pattern Evidence" in proposal_text
 
     tasks = orchestrator.tasks.read_all()
     validation = [task for task in tasks if task["type"] == "rti_validation"]
     assert len(validation) == 1
-    assert validation[0]["id"] == f"ACT-VALIDATE-{third['linked_rti']}"
+    assert validation[0]["id"] == f"ACT-VALIDATE-{third['linked_rti_proposal']}"
 
     cos_index = json.loads((tmp_path / "cos_index.json").read_text(encoding="utf-8"))
-    linked = [entry["linked_rti"] for entry in cos_index if entry["pattern_key"] == third["pattern_key"]]
+    linked = [entry["linked_rti_proposal"] for entry in cos_index if entry["pattern_key"] == third["pattern_key"]]
     assert len(linked) == 3
-    assert all(value == third["linked_rti"] for value in linked)
+    assert all(value == third["linked_rti_proposal"] for value in linked)
 
 
 def test_rule_of_three_does_not_fire_twice_for_same_pattern(tmp_path, monkeypatch) -> None:
@@ -73,7 +73,7 @@ def test_rule_of_three_does_not_fire_twice_for_same_pattern(tmp_path, monkeypatc
     third = _add_rejected(orchestrator, suffix="3")
     fourth = _add_rejected(orchestrator, suffix="4")
 
-    assert third["linked_rti"] == fourth["linked_rti"]
+    assert third["linked_rti_proposal"] == fourth["linked_rti_proposal"]
     assert fourth["rti_triggered"] is False
 
     tasks = [task for task in orchestrator.tasks.read_all() if task["type"] == "rti_validation"]

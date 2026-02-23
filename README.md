@@ -1724,6 +1724,30 @@ Edit `ingest/sources.yaml` and add a new source entry with:
   - RTI final: `<vault_root>/RTI/<RTI_ID>.md`
 - Files are written atomically (temp file + replace).
 
+### L5 Routing Guard (Staging + Publish)
+
+Staging records are stored under `<data_dir>/test_data/`:
+- `lti_drafts.jsonl`, `rti_proposals.jsonl`
+- `lti_index.json`, `rti_index.json`
+
+Commands:
+```powershell
+# After gate decision
+python -m orchestrator.cli --data-dir orchestrator/data route-after-gate --decision-id DEC-YYYY-Wxx-NNN --vault-dir <vault_root>
+
+# List staged artifacts
+python -m orchestrator.cli --data-dir orchestrator/data list-staged --type lti --status draft
+
+# Publish or reject
+python -m orchestrator.cli --data-dir orchestrator/data publish-lti --id LTI-DRAFT-YYYYMMDD-NNN --reviewer "Lisa" --notes "OK" --vault-dir <vault_root>
+python -m orchestrator.cli --data-dir orchestrator/data reject-lti --id LTI-DRAFT-YYYYMMDD-NNN --reviewer "Lisa" --reason "Not ready" --vault-dir <vault_root>
+python -m orchestrator.cli --data-dir orchestrator/data publish-rti --id RTI-PROP-YYYYMMDD-NNN --reviewer "Lisa" --notes "OK" --vault-dir <vault_root>
+python -m orchestrator.cli --data-dir orchestrator/data reject-rti --id RTI-PROP-YYYYMMDD-NNN --reviewer "Lisa" --reason "Not ready" --vault-dir <vault_root>
+
+# Rule-of-three proposal
+python -m orchestrator.cli --data-dir orchestrator/data rule-of-three --pattern-id FP-TEST-001 --vault-dir <vault_root>
+```
+
 ## Weekly Task Scheduler Snippet (Layer 1 Intake)
 
 Use Windows Task Scheduler to run weekly Layer-1 signal intake on **Monday 09:10**.

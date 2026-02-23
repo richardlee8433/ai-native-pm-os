@@ -15,6 +15,15 @@ from orchestrator.vault_ops import (
     write_signal_markdown,
     write_weekly_review_from_signals,
 )
+from orchestrator.l5_routing_guard import (
+    route_after_gate_decision,
+    list_staged,
+    publish_lti_draft,
+    reject_lti_draft,
+    publish_rti_proposal,
+    reject_rti_proposal,
+    check_rule_of_three_and_propose_rti,
+)
 from orchestrator.workflow import Orchestrator
 from pm_os_contracts.models import SIGNAL
 
@@ -112,6 +121,42 @@ def build_parser() -> argparse.ArgumentParser:
     deepen_run.add_argument("--force", action="store_true", default=False)
     deepen_run.add_argument("--signal-id")
     deepen_run.add_argument("--vault-root")
+
+    route_gate = subparsers.add_parser("route-after-gate", help="Route L5 staging after L4 decision")
+    route_gate.add_argument("--decision-id", required=True)
+    route_gate.add_argument("--vault-dir", required=True)
+
+    list_staged_cmd = subparsers.add_parser("list-staged", help="List staged LTI/RTI artifacts")
+    list_staged_cmd.add_argument("--type", required=True, choices=["lti", "rti"])
+    list_staged_cmd.add_argument("--status", default=None, choices=["draft", "published", "rejected"])
+
+    publish_lti_cmd = subparsers.add_parser("publish-lti", help="Publish an LTI draft")
+    publish_lti_cmd.add_argument("--id", required=True)
+    publish_lti_cmd.add_argument("--reviewer", required=True)
+    publish_lti_cmd.add_argument("--notes", required=True)
+    publish_lti_cmd.add_argument("--vault-dir", required=True)
+
+    reject_lti_cmd = subparsers.add_parser("reject-lti", help="Reject an LTI draft")
+    reject_lti_cmd.add_argument("--id", required=True)
+    reject_lti_cmd.add_argument("--reviewer", required=True)
+    reject_lti_cmd.add_argument("--reason", required=True)
+    reject_lti_cmd.add_argument("--vault-dir", required=True)
+
+    publish_rti_cmd = subparsers.add_parser("publish-rti", help="Publish an RTI proposal")
+    publish_rti_cmd.add_argument("--id", required=True)
+    publish_rti_cmd.add_argument("--reviewer", required=True)
+    publish_rti_cmd.add_argument("--notes", required=True)
+    publish_rti_cmd.add_argument("--vault-dir", required=True)
+
+    reject_rti_cmd = subparsers.add_parser("reject-rti", help="Reject an RTI proposal")
+    reject_rti_cmd.add_argument("--id", required=True)
+    reject_rti_cmd.add_argument("--reviewer", required=True)
+    reject_rti_cmd.add_argument("--reason", required=True)
+    reject_rti_cmd.add_argument("--vault-dir", required=True)
+
+    rule_three = subparsers.add_parser("rule-of-three", help="Check Rule-of-Three and propose RTI")
+    rule_three.add_argument("--pattern-id", required=True)
+    rule_three.add_argument("--vault-dir", required=True)
 
     return parser
 
@@ -279,6 +324,41 @@ def main(argv: list[str] | None = None) -> int:
             vault_root=args.vault_root,
         )
         print(json.dumps(payload))
+        return 0
+
+    if args.command == "route-after-gate":
+        created = route_after_gate_decision(args.decision_id, Path(args.data_dir), Path(args.vault_dir))
+        print(json.dumps({"ok": True, "created": created, "skipped": [], "errors": []}))
+        return 0
+
+    if args.command == "list-staged":
+        rows = list_staged(Path(args.data_dir), artifact_type=args.type, status=args.status)
+        print(json.dumps({"ok": True, "items": rows}))
+        return 0
+
+    if args.command == "publish-lti":
+        path = publish_lti_draft(args.id, Path(args.vault_dir), Path(args.data_dir), args.reviewer, args.notes)
+        print(json.dumps({"ok": True, "published": args.id, "path": path}))
+        return 0
+
+    if args.command == "reject-lti":
+        reject_lti_draft(args.id, Path(args.data_dir), Path(args.vault_dir), args.reviewer, args.reason)
+        print(json.dumps({"ok": True, "rejected": args.id}))
+        return 0
+
+    if args.command == "publish-rti":
+        path = publish_rti_proposal(args.id, Path(args.vault_dir), Path(args.data_dir), args.reviewer, args.notes)
+        print(json.dumps({"ok": True, "published": args.id, "path": path}))
+        return 0
+
+    if args.command == "reject-rti":
+        reject_rti_proposal(args.id, Path(args.vault_dir), Path(args.data_dir), args.reviewer, args.reason)
+        print(json.dumps({"ok": True, "rejected": args.id}))
+        return 0
+
+    if args.command == "rule-of-three":
+        proposal_id = check_rule_of_three_and_propose_rti(args.pattern_id, Path(args.data_dir), Path(args.vault_dir))
+        print(json.dumps({"ok": True, "proposal_id": proposal_id}))
         return 0
 
     parser.error("Unknown command")
