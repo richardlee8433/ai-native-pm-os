@@ -17,6 +17,7 @@ from pm_os_contracts.models import ACTION_TASK, LTI_NODE, RTI_NODE, SIGNAL
 
 from orchestrator.storage import JSONLStorage
 from orchestrator.vault_ops import _excerpt, write_gate_decision, write_lti_markdown, write_rti_markdown, write_signal_markdown
+from orchestrator.l5_routing_guard import route_after_gate_decision, check_rule_of_three_and_propose_rti
 
 DEFAULT_NEXT_ACTIONS = {
     "approved": ["Deepen evidence (L3 full fetch)", "Draft LTI insight note"],
@@ -494,6 +495,12 @@ class Orchestrator:
                 decision_reason=resolved_reason,
             )
 
+        l5_created: list[dict[str, Any]] = []
+        try:
+            l5_created = route_after_gate_decision(decision_id, self.data_dir, self.vault_root)
+        except Exception as exc:  # noqa: BLE001
+            l5_created = [{"error": str(exc)}]
+
         return {
             **index_entry,
             "reason": resolved_reason,
@@ -502,6 +509,7 @@ class Orchestrator:
             "deepening_task_created": deepening_task_created,
             "deepening_task_id": deepening_task_id,
             "signal_updated": signal_updated,
+            "l5_created": l5_created,
             **rejection_payload,
         }
 
@@ -517,6 +525,7 @@ class Orchestrator:
                     "cos_id": entry["cos_id"],
                     "pattern_key": entry["pattern_key"],
                     "linked_rti": entry.get("linked_rti"),
+                    "linked_rti_proposal": entry.get("linked_rti_proposal"),
                 }
 
         pattern_key = self._compute_pattern_key(signal.to_dict(), decision_reason)
@@ -567,6 +576,7 @@ class Orchestrator:
             "pattern_key": pattern_key,
             "created_at": now_iso,
             "linked_rti": None,
+            "linked_rti_proposal": None,
         }
         cos_index.append(entry)
         trigger_payload = self._apply_rule_of_three(pattern_key=pattern_key, cos_index=cos_index, now=now)
@@ -581,56 +591,35 @@ class Orchestrator:
     def _apply_rule_of_three(self, *, pattern_key: str, cos_index: list[dict[str, Any]], now: dt.datetime) -> dict[str, Any]:
         matches = [entry for entry in cos_index if entry.get("pattern_key") == pattern_key]
         if len(matches) < 3:
-            return {"linked_rti": None, "rti_triggered": False}
+            return {"linked_rti_proposal": None, "rti_triggered": False}
 
-        linked_existing = next((entry.get("linked_rti") for entry in matches if entry.get("linked_rti")), None)
+        linked_existing = next((entry.get("linked_rti_proposal") for entry in matches if entry.get("linked_rti_proposal")), None)
         if isinstance(linked_existing, str):
-            return {"linked_rti": linked_existing, "rti_triggered": False}
+            return {"linked_rti_proposal": linked_existing, "rti_triggered": False}
 
-        rti_id = self._next_rti_revision_id(now.date())
-        rti_path = self.vault_root / "01_RTI" / f"{rti_id}.md"
-        if rti_path.exists():
-            raise FileExistsError(f"RTI file already exists: {rti_path}")
+        proposal_id = check_rule_of_three_and_propose_rti(pattern_key, self.data_dir, self.vault_root)
+        if not proposal_id:
+            return {"linked_rti_proposal": None, "rti_triggered": False}
 
-        content = "\n".join(
-            [
-                "---",
-                f"id: {rti_id}",
-                f"title: RTI review for pattern {pattern_key}",
-                "status: under_review",
-                "trigger_reason: Rule of Three",
-                f"trigger_pattern_key: {pattern_key}",
-                f"updated_at: {now.isoformat()}",
-                "immutable: false",
-                "---",
-                "",
-                f"# RTI Revision {rti_id}",
-                "",
-                "Triggered automatically by repeated COS pattern.",
-                "",
-            ]
-        )
-        self._write_atomic(rti_path, content)
-
-        task_id = f"ACT-VALIDATE-{rti_id}"
+        task_id = f"ACT-VALIDATE-{proposal_id}"
         if not any(task.get("id") == task_id for task in self.tasks.read_all()):
             self.tasks.append(
                 {
                     "id": task_id,
                     "type": "rti_validation",
-                    "goal": "Re-evaluate RTI due to repeated COS pattern",
+                    "goal": "Review RTI proposal due to repeated COS pattern",
                     "status": "pending",
                     "auto_generated": True,
                     "created_at": now.isoformat(),
-                    "rti_id": rti_id,
+                    "rti_proposal_id": proposal_id,
                     "trigger_pattern_key": pattern_key,
                 }
             )
 
         for entry in matches:
-            entry["linked_rti"] = rti_id
+            entry["linked_rti_proposal"] = proposal_id
 
-        return {"linked_rti": rti_id, "rti_triggered": True}
+        return {"linked_rti_proposal": proposal_id, "rti_triggered": True}
 
     def _compute_pattern_key(self, signal: dict[str, Any], decision_reason: str) -> str:
         normalized_reason = self._normalize_text(decision_reason)
