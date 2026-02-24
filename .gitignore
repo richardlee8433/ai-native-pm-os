@@ -7,3 +7,13 @@ __pycache__/
 *.log
 dist/
 build/
+.tmp/
+.vault_test/
+orchestrator/data/
+Microsoft/
+
+local_tmp/
+pytest-cache-files-*/
+.pytest_cache/
+__pycache__/
+*.py[cod]
