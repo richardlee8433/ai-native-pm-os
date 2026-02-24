@@ -35,7 +35,7 @@ def test_manual_workflow_signal_action_writeback(tmp_path, monkeypatch) -> None:
     lti_payload = orchestrator.apply_writeback()
     assert lti_payload["id"] == "LTI-1.0"
     assert lti_payload["linked_evidence"] == [task.id]
-    assert lti_payload["written_path"].endswith("96_Weekly_Review/_LTI_Drafts/LTI-1.0.md")
+    assert lti_payload["written_path"].replace("\\", "/").endswith("96_Weekly_Review/_LTI_Drafts/LTI-1.0.md")
 
     signal_rows = orchestrator.signals.read_all()
     linked = [row for row in signal_rows if row["id"] == high.id][0]
@@ -213,6 +213,34 @@ def test_gate_non_approved_does_not_create_deepening_task(tmp_path, monkeypatch)
 
     signal_row = orchestrator.signals.read_all()[0]
     assert "gate_status" not in signal_row
+
+
+def test_writeback_syncs_lti_index(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    vault_root = tmp_path / "vault"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    orchestrator.add_signal(source="manual", signal_type="market", title="Index sync")
+    task = orchestrator.generate_action()
+
+    _ = orchestrator.apply_writeback(action_id=task.id, artifact_kind="lti")
+
+    lti_index = vault_root / "02_LTI" / "lti_index.json"
+    assert lti_index.exists()
+
+
+def test_rejection_syncs_cos_index(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 17, 10, 0, 0, tzinfo=dt.timezone.utc))
+    vault_root = tmp_path / "vault"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    signal = orchestrator.add_signal(source="manual", signal_type="governance", title="Reject me")
+    _ = orchestrator.create_gate_decision(signal_id=signal.id, decision="reject", priority="Low")
+
+    cos_index = vault_root / "06_Archive" / "COS" / "cos_index.json"
+    assert cos_index.exists()
 
 
 def test_run_deepening_appends_evidence_and_updates_state(tmp_path, monkeypatch) -> None:

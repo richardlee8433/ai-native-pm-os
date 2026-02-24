@@ -14,6 +14,7 @@ from urllib import request as urllib_request
 from urllib.error import HTTPError, URLError
 
 from pm_os_contracts.models import ACTION_TASK, LTI_NODE, RTI_NODE, SIGNAL
+from kb_manager import KnowledgeBaseManager
 
 from orchestrator.storage import JSONLStorage
 from orchestrator.vault_ops import _excerpt, write_gate_decision, write_lti_markdown, write_rti_markdown, write_signal_markdown
@@ -374,6 +375,7 @@ class Orchestrator:
                 human_approved=human_approved,
                 publish_intent=publish_intent,
             )
+            self._sync_kb_indices()
             payload = lti_node.to_dict()
             payload["id"] = lti_node.id
         elif artifact_kind == "rti":
@@ -392,6 +394,7 @@ class Orchestrator:
                 human_approved=human_approved,
                 rti_intent=rti_intent,
             )
+            self._sync_kb_indices()
             payload = rti_node.to_dict()
             payload["id"] = rti_node.id
         else:
@@ -596,6 +599,7 @@ class Orchestrator:
             ]
         )
         self._write_atomic(cos_path, "\n".join(lines))
+        self._sync_kb_indices()
 
         entry = {
             "cos_id": cos_id,
@@ -615,6 +619,9 @@ class Orchestrator:
             "pattern_key": pattern_key,
             **trigger_payload,
         }
+
+    def _sync_kb_indices(self) -> None:
+        KnowledgeBaseManager(self.vault_root).sync_indices()
 
     def _apply_rule_of_three(self, *, pattern_key: str, cos_index: list[dict[str, Any]], now: dt.datetime) -> dict[str, Any]:
         matches = [entry for entry in cos_index if entry.get("pattern_key") == pattern_key]
