@@ -127,6 +127,57 @@ def test_gate_approved_creates_deepening_task_and_updates_signal(tmp_path, monke
     assert signals[0]["deepening_task_id"] == f"ACT-DEEPEN-{signal.id}"
 
 
+def test_gate_approved_routes_l5_and_marks_decided(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    vault_root = tmp_path / "vault"
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(vault_root))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    signal = orchestrator.add_signal(
+        source="manual",
+        signal_type="capability",
+        title="Route me",
+        content="Evidence preview",
+    )
+
+    payload = orchestrator.create_gate_decision(signal_id=signal.id, decision="approved", priority="High")
+
+    l5_created = payload["l5_created"]
+    draft_entry = next(item for item in l5_created if item.get("type") == "lti_draft")
+    draft_id = draft_entry["id"]
+    assert (vault_root / "96_Weekly_Review" / "_LTI_Drafts" / f"{draft_id}.md").exists()
+
+    signal_row = orchestrator.signals.read_all()[0]
+    assert signal_row["lifecycle_status"] == "decided"
+    assert signal_row["lti_draft_id"] == draft_id
+
+
+def test_gate_approved_route_error_does_not_mark_decided(tmp_path, monkeypatch) -> None:
+    now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
+    monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))
+    orchestrator = Orchestrator(tmp_path, now_provider=now)
+
+    signal = orchestrator.add_signal(
+        source="manual",
+        signal_type="capability",
+        title="Broken routing",
+        content="Evidence preview",
+    )
+
+    def _raise_route(*_args, **_kwargs):
+        raise FileNotFoundError("vault missing")
+
+    import orchestrator.workflow as workflow
+
+    monkeypatch.setattr(workflow, "route_after_gate_decision", _raise_route)
+
+    payload = orchestrator.create_gate_decision(signal_id=signal.id, decision="approved", priority="High")
+    assert payload["l5_created"][0]["error"].startswith("path error:")
+
+    signal_row = orchestrator.signals.read_all()[0]
+    assert "lifecycle_status" not in signal_row
+
+
 def test_gate_duplicate_approved_is_idempotent(tmp_path, monkeypatch) -> None:
     now = FakeNow(dt.datetime(2026, 2, 16, 10, 0, 0, tzinfo=dt.timezone.utc))
     monkeypatch.setenv("PM_OS_VAULT_ROOT", str(tmp_path / "vault"))

@@ -496,10 +496,22 @@ class Orchestrator:
             )
 
         l5_created: list[dict[str, Any]] = []
-        try:
-            l5_created = route_after_gate_decision(decision_id, self.data_dir, self.vault_root)
-        except Exception as exc:  # noqa: BLE001
-            l5_created = [{"error": str(exc)}]
+        if decision == "approved":
+            try:
+                l5_created = route_after_gate_decision(decision_id, self.data_dir, self.vault_root)
+            except (FileNotFoundError, NotADirectoryError) as exc:
+                l5_created = [{"error": f"path error: {exc}"}]
+            except OSError as exc:
+                l5_created = [{"error": f"os error: {exc}"}]
+            except Exception as exc:  # noqa: BLE001
+                l5_created = [{"error": str(exc)}]
+
+            lti_draft_id = next(
+                (item.get("id") for item in l5_created if item.get("type") == "lti_draft"),
+                None,
+            )
+            if not any("error" in item for item in l5_created):
+                self._mark_signal_decided(signal.id, lti_draft_id)
 
         return {
             **index_entry,
@@ -512,6 +524,22 @@ class Orchestrator:
             "l5_created": l5_created,
             **rejection_payload,
         }
+
+    def _mark_signal_decided(self, signal_id: str, lti_draft_id: str | None) -> bool:
+        if not signal_id:
+            return False
+        rows = self.signals.read_all()
+        updated = False
+        for row in rows:
+            if row.get("id") == signal_id:
+                row["lifecycle_status"] = "decided"
+                if lti_draft_id:
+                    row["lti_draft_id"] = lti_draft_id
+                updated = True
+                break
+        if updated:
+            self.signals.rewrite_all(rows)
+        return updated
 
     def handle_rejection(self, *, signal_id: str, decision_id: str, decision_reason: str) -> dict[str, Any]:
         signal = self._select_signal(signal_id)
@@ -709,7 +737,14 @@ class Orchestrator:
             for signal in signals:
                 if signal.id == signal_id:
                     return signal
-            raise ValueError(f"Signal not found: {signal_id}")
+            available = [signal.id for signal in signals]
+            preview = ", ".join(available[:10])
+            suffix = "..." if len(available) > 10 else ""
+            raise ValueError(
+                "Signal not found: "
+                f"{signal_id}. Available signal IDs: {preview}{suffix}. "
+                "Verify the ID or list signals with `signal top` / `signal add`."
+            )
 
         return self.top_signals(limit=1)[0]
 
