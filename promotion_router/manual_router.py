@@ -21,23 +21,24 @@ def route_manual_promotion(
     if not enabled:
         return {"skipped": True, "reason": "use_v41_promotion disabled"}
 
-    evidence = _read_frontmatter(evidence_pack_path)
-    outcome = (evidence.get("outcome") or "").strip().lower()
-    recommendation = (evidence.get("recommendation") or "").strip().lower()
-    governance_impact = (evidence.get("governance_impact") or "").strip().lower()
-    pack_id = evidence.get("id") or evidence_pack_path.stem
+    decision = decide_manual_promotion(evidence_pack_path=evidence_pack_path)
+    if decision["decision"] == "blocked":
+        return {"skipped": True, "reason": decision.get("reason")}
+
+    governance_impact = decision.get("governance_impact", "")
+    pack_id = decision.get("pack_id", evidence_pack_path.stem)
 
     created: dict[str, Any] = {"lti_created": None, "rti_review_created": None}
 
-    if outcome in {"pass", "strong_partial"} and recommendation == "promote":
-        lti_id = _next_lti_id(vault_root)
+    if decision["decision"] == "promote_to_lti":
+        lti_id = next_lti_id(vault_root)
         now = dt.datetime.now(tz=dt.timezone.utc)
         lti_node = LTI_NODE(
             id=lti_id,
-            title=evidence.get("title") or f"Provisional LTI {lti_id}",
+            title=decision.get("title") or f"Provisional LTI {lti_id}",
             series="LTI-1.x",
             status="under_review",
-            summary=evidence.get("delta") or "Provisional LTI from AVL evidence.",
+            summary=decision.get("delta") or "Provisional LTI from AVL evidence.",
             linked_evidence=[pack_id],
             validation_status="provisional",
             source_graph_nodes=source_graph_nodes or [],
@@ -52,15 +53,55 @@ def route_manual_promotion(
         )
         created["lti_created"] = str(path)
 
-    if governance_impact in {"review", "triggers"}:
-        review_path = _write_rti_review(
-            vault_root=vault_root,
-            evidence_pack_id=pack_id,
-            governance_impact=governance_impact,
+    if decision["decision"] == "rtireview" or governance_impact in {"review", "triggers"}:
+        created["rti_review_created"] = str(
+            write_rti_review(
+                vault_root=vault_root,
+                evidence_pack_id=pack_id,
+                governance_impact=governance_impact or "review",
+            )
         )
-        created["rti_review_created"] = str(review_path)
 
     return created
+
+
+def decide_manual_promotion(*, evidence_pack_path: Path) -> dict[str, Any]:
+    evidence = _read_frontmatter(evidence_pack_path)
+    outcome = (evidence.get("outcome") or "").strip().lower()
+    recommendation = (evidence.get("recommendation") or "").strip().lower()
+    governance_impact = (evidence.get("governance_impact") or "").strip().lower()
+    validator = (evidence.get("validator") or "").strip().lower()
+    pack_id = evidence.get("id") or evidence_pack_path.stem
+
+    if validator and validator not in {"cx_replay_stub", "manual"}:
+        return {"decision": "blocked", "reason": f"unsupported validator: {validator}", "pack_id": pack_id}
+
+    if outcome in {"pass", "strong_partial"} and recommendation == "promote":
+        return {
+            "decision": "promote_to_lti",
+            "pack_id": pack_id,
+            "title": evidence.get("title"),
+            "delta": evidence.get("delta"),
+            "governance_impact": governance_impact,
+        }
+
+    if governance_impact in {"review", "triggers"}:
+        return {"decision": "rtireview", "pack_id": pack_id, "governance_impact": governance_impact}
+
+    reason = "evidence not promotable"
+    return {"decision": "blocked", "reason": reason, "pack_id": pack_id}
+
+
+def next_lti_id(vault_root: Path) -> str:
+    return _next_lti_id(vault_root)
+
+
+def write_rti_review(*, vault_root: Path, evidence_pack_id: str, governance_impact: str) -> Path:
+    return _write_rti_review(
+        vault_root=vault_root,
+        evidence_pack_id=evidence_pack_id,
+        governance_impact=governance_impact,
+    )
 
 
 def _resolve_flag(value: bool | None) -> bool:

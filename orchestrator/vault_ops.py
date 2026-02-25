@@ -274,6 +274,8 @@ def write_lti_markdown(
         f"series: {_yaml_scalar(node.series)}\n"
         f"status: {_yaml_scalar(node.status)}\n"
         f"validation_status: {_yaml_scalar(getattr(node, 'validation_status', None))}\n"
+        f"revalidate_by: {_yaml_scalar(getattr(node, 'revalidate_by', None))}\n"
+        f"revalidate_status: {_yaml_scalar(getattr(node, 'revalidate_status', None))}\n"
         f"published_at: {_yaml_scalar(node.published_at.isoformat() if node.published_at else None)}\n"
         f"confidence_level: {_yaml_scalar(node.confidence_level)}\n"
         "linked_evidence:\n"

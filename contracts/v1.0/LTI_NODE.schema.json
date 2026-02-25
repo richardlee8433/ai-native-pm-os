@@ -29,6 +29,23 @@
       "type": "array",
       "items": {"type": "string"}
     },
+    "validation_status": {
+      "type": "string",
+      "enum": ["provisional", "validated_metrics"]
+    },
+    "revalidate_by": { "type": "string", "format": "date" },
+    "revalidate_status": {
+      "type": "string",
+      "enum": ["pending", "complete", "overdue", "n/a"]
+    },
+    "source_graph_nodes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "validation_evidence_packs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "revision_history": {
       "type": "array",
       "items": {

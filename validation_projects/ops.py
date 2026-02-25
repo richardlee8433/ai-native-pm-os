@@ -85,6 +85,9 @@ class ValidationProjectStore:
         self._update_index_from_payload(project)
         return project
 
+    def get(self, project_id: str) -> dict[str, Any]:
+        return self._load_project(project_id)
+
     def _next_id(self, day: dt.date) -> str:
         date_key = day.strftime("%Y")
         existing = []

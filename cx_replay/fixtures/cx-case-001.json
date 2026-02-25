@@ -1,0 +1,12 @@
+﻿{
+  "id": "cx-case-001",
+  "title": "Escalation rule reduces false positives",
+  "hypothesis": "A tighter escalation rule prevents unnecessary executive review without harming outcomes.",
+  "context": "Replay of canonical escalation cases from Q1.",
+  "outcome": "pass",
+  "cost_paid": "time: 2h analysis",
+  "failure_modes": ["edge case coverage incomplete"],
+  "delta": "Reduced escalation noise by 20% in replay.",
+  "recommendation": "promote",
+  "governance_impact": "review"
+}

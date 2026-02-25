@@ -1,0 +1,12 @@
+﻿{
+  "id": "cx-case-002",
+  "title": "Playbook variant improves cycle time",
+  "hypothesis": "A simplified decision tree reduces cycle time with acceptable accuracy tradeoffs.",
+  "context": "Replay of canonical operational decisions.",
+  "outcome": "partial",
+  "cost_paid": "risk: minor accuracy regression",
+  "failure_modes": ["accuracy drop in edge scenarios"],
+  "delta": "Cycle time improved by ~15% but accuracy dipped in rare cases.",
+  "recommendation": "revise",
+  "governance_impact": "none"
+}

@@ -91,6 +91,18 @@ class EvidencePackStore:
         missing = [field for field in REQUIRED_FIELDS if not payload.get(field)]
         return {"ok": not missing, "missing": missing, "id": payload.get("id"), "path": str(path)}
 
+    def find_by_id(self, pack_id: str) -> dict[str, Any] | None:
+        if not self.index_path.exists():
+            return None
+        payload = json.loads(self.index_path.read_text(encoding="utf-8"))
+        for item in payload.get("items", []):
+            if item.get("id") == pack_id:
+                return item
+        return None
+
+    def read_frontmatter(self, path: Path) -> dict[str, str]:
+        return self._read_frontmatter(path)
+
     def _next_id(self, day: dt.date) -> str:
         date_key = day.strftime("%Y%m%d")
         prefix = f"AVL-EP-{date_key}-"
