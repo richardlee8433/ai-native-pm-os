@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "status", "created_at", "updated_at"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^VP-[0-9]{4}-[0-9]{3}$" },
+    "status": { "type": "string", "enum": ["planned", "active", "blocked", "completed", "archived"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "linked_graph_nodes": { "type": "array", "items": { "type": "string" } },
+    "linked_evidence_packs": { "type": "array", "items": { "type": "string" } }
+  }
+}

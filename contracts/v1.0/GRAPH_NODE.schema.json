@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id", "type", "status", "title", "created_at", "updated_at"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^GRAPH-[A-Z]+-[0-9]{8}-[0-9]{3}$" },
+    "type": { "type": "string", "enum": ["concept", "skill", "playbook", "hypothesis", "evidence"] },
+    "status": { "type": "string", "enum": ["exploring", "validation_ready", "validated", "archived"] },
+    "title": { "type": "string" },
+    "content": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "validation_plan": { "type": "string" },
+    "related_nodes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

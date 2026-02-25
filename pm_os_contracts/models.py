@@ -103,6 +103,50 @@ class LTI_NODE(ContractBaseModel):
     linked_evidence: list[str] | None = None
     linked_rti: list[str] | None = None
     revision_history: list[RevisionHistoryEntry] | None = None
+    validation_status: Literal["provisional", "validated_metrics"] | None = None
+    revalidate_by: dt.date | None = None
+    revalidate_status: Literal["pending", "complete", "overdue", "n/a"] | None = None
+    source_graph_nodes: list[str] | None = None
+    validation_evidence_packs: list[str] | None = None
+
+
+class GRAPH_NODE(ContractBaseModel):
+    id: str = Field(pattern=r"^GRAPH-[A-Z]+-[0-9]{8}-[0-9]{3}$")
+    type: Literal["concept", "skill", "playbook", "hypothesis", "evidence"]
+    status: Literal["exploring", "validation_ready", "validated", "archived"]
+    title: str
+    content: str | None = None
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    validation_plan: str | None = None
+    related_nodes: list[str] | None = None
+    tags: list[str] | None = None
+
+
+class AVL_EVIDENCE_PACK(ContractBaseModel):
+    id: str = Field(pattern=r"^AVL-EP-[0-9]{8}-[0-9]{3}$")
+    hypothesis: str
+    context: str
+    method: Literal["project_cycle", "replay"]
+    outcome: Literal["pass", "strong_partial", "partial", "fail"]
+    cost_paid: str
+    failure_modes: list[str]
+    delta: str
+    recommendation: Literal["promote", "revise", "archive"]
+    governance_impact: Literal["none", "review", "triggers"]
+    created_at: dt.datetime | None = None
+    updated_at: dt.datetime | None = None
+
+
+class VALIDATION_PROJECT(ContractBaseModel):
+    id: str = Field(pattern=r"^VP-[0-9]{4}-[0-9]{3}$")
+    status: Literal["planned", "active", "blocked", "completed", "archived"]
+    created_at: dt.datetime
+    updated_at: dt.datetime
+    title: str | None = None
+    description: str | None = None
+    linked_graph_nodes: list[str] | None = None
+    linked_evidence_packs: list[str] | None = None
 
 
 class EvidenceRef(ContractBaseModel):
@@ -222,6 +266,9 @@ CONTRACT_MODEL_MAP: dict[str, type[ContractBaseModel]] = {
     "EVAL_REPORT": EVAL_REPORT,
     "GATE_DECISION": GATE_DECISION,
     "LTI_NODE": LTI_NODE,
+    "GRAPH_NODE": GRAPH_NODE,
+    "AVL_EVIDENCE_PACK": AVL_EVIDENCE_PACK,
+    "VALIDATION_PROJECT": VALIDATION_PROJECT,
     "COS_CASE": COS_CASE,
     "RTI_NODE": RTI_NODE,
     "LTI_DRAFT": LTI_DRAFT,

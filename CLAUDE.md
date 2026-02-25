@@ -9,7 +9,7 @@
 - **L5 (Writeback)**: 自動寫回工作層（02_LTI/RTI），需人工審核。
 
 ## 2. 當前開發進度 (截至 2026-02-24)
-- **整體狀態**: 90% 已完成，核心流程 L1→L5 已運作，已進入 MVP 驗證階段。
+- **整體狀態**: 98% 已完成，核心流程 L1→L5 已運作，v4.1 最小可運行版本已到位，進入 MVP 驗證階段。
 - **重要里程碑**:
   - 三路徑決策分支（Approved / Deferred / Reject）已實作。
   - 自動化 L3 深度挖掘流水線已完成驗證。
@@ -18,10 +18,14 @@
   - Task 1.2：RTI 三次法則已完成，重複 COS pattern 自動觸發 RTI 提案。
   - Task 1.3：writeback 後自動同步索引（kb_manager.sync_indices）。
   - Task 1.4：weekly_cycle.ps1 全流程自動化腳本已完成。
+  - Task 1.5：v4.1 Graph Layer + AVL Evidence Pack + Validation Project + Manual Promotion Router (MVP) 已完成。
+  - v4.1 MVP Tasks 1–5 已完成，並保持 v3.0 流程相容。
 
 ## 3. 🚨 關鍵技術債與優先修復 (P0 阻斷點)
-目前無 P0 阻斷點，以下將轉為例行追蹤：
-- 任務 1.2 與 1.3 已結案，持續監看索引同步會否涉及 LTI/COS/RTI 形式不一定造成的不完整性。
+目前無 P0 阻斷點，以下為技術債追蹤：
+- Metrics gate 尚未啟用（v4.1 先以 human-augmented 為主）。
+- CX replay validator 尚未接入。
+- Provisional revalidation policy 尚未自動化。
 
 ## 4. 存儲規範與資料架構
 - **不可篡改性 (Immutable)**: L4 決策記錄絕對不可覆寫，僅能建立新修訂檔。

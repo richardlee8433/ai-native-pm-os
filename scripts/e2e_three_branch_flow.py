@@ -353,7 +353,7 @@ def main() -> int:
         final_lti = vault_dir / Path(draft_after["final_vault_path"])
         assert_true(final_lti.exists(), "published LTI markdown should exist")
 
-        print("[E2E] Step 6: Rule of Three → RTI proposal")
+        print("[E2E] Step 6: Rule of Three -> RTI proposal")
         reject_reason = "E2E reject pattern: auth boundary"
         for _ in range(2):
             run_cli(

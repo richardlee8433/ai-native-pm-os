@@ -42,7 +42,7 @@ def test_cli_signal_action_writeback_flow(tmp_path, capsys, monkeypatch) -> None
     lti_payload = json.loads(capsys.readouterr().out)
     assert lti_payload["id"].startswith("LTI-")
     assert lti_payload["written_path"].endswith(".md")
-    assert "96_Weekly_Review/_LTI_Drafts" in lti_payload["written_path"]
+    assert "96_Weekly_Review/_LTI_Drafts" in lti_payload["written_path"].replace("\\", "/")
 
 
 

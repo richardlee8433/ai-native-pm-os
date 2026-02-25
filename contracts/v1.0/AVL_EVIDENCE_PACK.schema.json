@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "id",
+    "hypothesis",
+    "context",
+    "method",
+    "outcome",
+    "cost_paid",
+    "failure_modes",
+    "delta",
+    "recommendation",
+    "governance_impact"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^AVL-EP-[0-9]{8}-[0-9]{3}$" },
+    "hypothesis": { "type": "string" },
+    "context": { "type": "string" },
+    "method": { "type": "string", "enum": ["project_cycle", "replay"] },
+    "outcome": { "type": "string", "enum": ["pass", "strong_partial", "partial", "fail"] },
+    "cost_paid": { "type": "string" },
+    "failure_modes": { "type": "array", "items": { "type": "string" } },
+    "delta": { "type": "string" },
+    "recommendation": { "type": "string", "enum": ["promote", "revise", "archive"] },
+    "governance_impact": { "type": "string", "enum": ["none", "review", "triggers"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
