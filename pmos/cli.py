@@ -5,11 +5,13 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from avl.ops import EvidencePackStore
 from cx_replay.replay_runner import run_fixture
 from graph.ops import GraphStore
 from revalidation.queue import write_queue_report
+from promotion.report_generator import generate_promotion_report
 from promotion_router.manual_router import decide_manual_promotion, next_lti_id, write_rti_review
 from orchestrator.vault_ops import write_lti_markdown
 from pm_os_contracts.models import LTI_NODE
@@ -52,7 +54,9 @@ def build_parser() -> argparse.ArgumentParser:
     vp_parser = subparsers.add_parser("vp")
     vp_sub = vp_parser.add_subparsers(dest="vp_command", required=True)
     vp_init = vp_sub.add_parser("init")
-    vp_init.add_argument("--title", required=True)
+    vp_init.add_argument("--title")
+    vp_init.add_argument("--from-graph", action="store_true", help="Initialize validation plan from a graph node")
+    vp_init.add_argument("--graph-id", help="Graph node id for --from-graph")
     vp_link_graph = vp_sub.add_parser("link-graph")
     vp_link_graph.add_argument("--id", required=True)
     vp_link_graph.add_argument("--graph-id", required=True, action="append")
@@ -129,6 +133,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "vp":
         store = ValidationProjectStore(root)
         if args.vp_command == "init":
+            if args.from_graph:
+                if not args.graph_id:
+                    print(json.dumps({"ok": False, "reason": "--graph-id is required with --from-graph"}))
+                    return 2
+                try:
+                    payload = store.init_from_graph(graph_id=args.graph_id, title=args.title)
+                except ValueError as exc:
+                    print(json.dumps({"ok": False, "reason": str(exc)}))
+                    return 2
+                print(json.dumps(payload))
+                return 0
+            if not args.title:
+                print(json.dumps({"ok": False, "reason": "--title is required"}))
+                return 2
             record = store.init(title=args.title)
             print(json.dumps(record.to_index()))
             return 0
@@ -142,6 +160,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.vp_command == "status":
             payload = store.update_status(project_id=args.id, status=args.status)
+            warnings = _vp_plan_warnings(payload)
+            if warnings:
+                payload = dict(payload)
+                payload["warnings"] = warnings
             print(json.dumps(payload))
             return 0
         if args.vp_command == "promote":
@@ -167,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
                 return 2
+            warnings = _vp_plan_warnings(project)
 
             graph_store = GraphStore(root)
             graph_node = graph_store.get(graph_ids[0])
@@ -195,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
 
             decision = decide_manual_promotion(evidence_pack_path=evidence_path)
+            report_payload = generate_promotion_report(root, vp_id=project.get("id", args.id))
             vault_root = _resolve_vault_root(root, args.vault)
             if decision["decision"] == "promote_to_lti":
                 lti_id = next_lti_id(vault_root)
@@ -229,6 +253,10 @@ def main(argv: list[str] | None = None) -> int:
                         governance_impact=governance_impact,
                     )
                     payload["rti_review_path"] = str(review_path)
+                if warnings:
+                    payload["warnings"] = warnings
+                payload["promotion_report_id"] = report_payload.get("promotion_id")
+                payload["promotion_report_path"] = report_payload.get("report_dir")
                 print(json.dumps(payload))
                 return 0
 
@@ -238,10 +266,20 @@ def main(argv: list[str] | None = None) -> int:
                     evidence_pack_id=decision.get("pack_id", evidence_ids[0]),
                     governance_impact=decision.get("governance_impact", "review"),
                 )
-                print(json.dumps({"ok": True, "action": "rti_review_created", "proposal_path": str(review_path)}))
+                payload = {"ok": True, "action": "rti_review_created", "proposal_path": str(review_path)}
+                if warnings:
+                    payload["warnings"] = warnings
+                payload["promotion_report_id"] = report_payload.get("promotion_id")
+                payload["promotion_report_path"] = report_payload.get("report_dir")
+                print(json.dumps(payload))
                 return 0
 
-            print(json.dumps({"ok": False, "action": "blocked", "reason": decision.get("reason", "blocked")}))
+            payload = {"ok": False, "action": "blocked", "reason": decision.get("reason", "blocked")}
+            if warnings:
+                payload["warnings"] = warnings
+            payload["promotion_report_id"] = report_payload.get("promotion_id")
+            payload["promotion_report_path"] = report_payload.get("report_dir")
+            print(json.dumps(payload))
             return 2
 
     if args.command == "lti":
@@ -265,6 +303,18 @@ def main(argv: list[str] | None = None) -> int:
 def _promotion_enabled() -> bool:
     env = os.getenv("PMOS_USE_V41_PROMOTION", "false").strip().lower()
     return env in {"1", "true", "yes", "on"}
+
+
+def _vp_plan_warnings(project: dict[str, Any]) -> list[str]:
+    plan = project.get("validation_plan") or {}
+    metrics = plan.get("metrics") or []
+    success = plan.get("success_criteria") or []
+    warnings: list[str] = []
+    if not metrics:
+        warnings.append("VP validation_plan.metrics is missing or empty")
+    if not success:
+        warnings.append("VP validation_plan.success_criteria is missing or empty")
+    return warnings
 
 
 def _resolve_vault_root(root: Path, override: str | None) -> Path:

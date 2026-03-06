@@ -26,3 +26,30 @@
   query: "cat:cs.AI+OR+cat:cs.LG"
   priority_weight: 0.7
   signal_type: research
+
+- id: lennys_newsletter
+  name: "Lenny's Newsletter"
+  type: html_list
+  url: "https://www.lennysnewsletter.com/"
+  priority_weight: 0.8
+  signal_type: ecosystem
+  source_type: pm_newsletter
+  credibility: high
+
+- id: just_another_pm
+  name: "Just Another PM"
+  type: html_list
+  url: "https://www.justanotherpm.com/"
+  priority_weight: 0.8
+  signal_type: ecosystem
+  source_type: pm_newsletter
+  credibility: high
+
+- id: aakash_newsletter
+  name: "Aakash G Newsletter"
+  type: html_list
+  url: "https://www.news.aakashg.com/"
+  priority_weight: 0.8
+  signal_type: ecosystem
+  source_type: pm_newsletter
+  credibility: high

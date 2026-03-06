@@ -22,6 +22,8 @@ class SourceConfig:
     url: str | None = None
     base_url: str | None = None
     signal_type: str = "research"
+    source_type: str | None = None
+    credibility: str | None = None
     weight: float = 0.5
     name: str | None = None
     include_pattern: str | None = None

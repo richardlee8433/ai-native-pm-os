@@ -1,0 +1,14 @@
+{
+  "id": "VP-2026-003",
+  "status": "planned",
+  "title": "Agent Onboarding + Decision File Validation (VP-2026-003)",
+  "created_at": "2026-02-25T23:03:49Z",
+  "updated_at": "2026-02-25T23:10:28Z",
+  "path": "validation_projects/VP-2026-003",
+  "linked_graph_nodes": [
+    "GRAPH-HYPOTHESIS-20260225-001"
+  ],
+  "linked_evidence_packs": [
+    "AVL-EP-20260225-003"
+  ]
+}

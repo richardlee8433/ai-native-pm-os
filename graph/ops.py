@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
 from orchestrator.storage import JSONLStorage
+from graph.validation import validate_newsletter_hypothesis_payload
 
 GraphType = Literal["concept", "skill", "playbook", "hypothesis", "evidence"]
 GraphStatus = Literal["exploring", "validation_ready", "validated", "archived"]
@@ -24,9 +25,10 @@ class GraphNodeRecord:
     validation_plan: str | None
     related_nodes: list[str]
     tags: list[str]
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "id": self.id,
             "type": self.type,
             "status": self.status,
@@ -38,6 +40,9 @@ class GraphNodeRecord:
             "related_nodes": self.related_nodes,
             "tags": self.tags,
         }
+        if self.extra:
+            payload.update(self.extra)
+        return payload
 
 
 class GraphStore:
@@ -57,11 +62,14 @@ class GraphStore:
         validation_plan: str | None = None,
         related_nodes: list[str] | None = None,
         tags: list[str] | None = None,
+        extra: dict[str, Any] | None = None,
         now: dt.datetime | None = None,
     ) -> GraphNodeRecord:
         now_dt = now or dt.datetime.now(tz=dt.timezone.utc)
         now_iso = now_dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
         node_id = self._next_id(node_type, now_dt.date())
+        extra_payload = dict(extra or {})
+        _validate_newsletter_extra(extra_payload)
 
         record = GraphNodeRecord(
             id=node_id,
@@ -74,10 +82,53 @@ class GraphStore:
             validation_plan=validation_plan,
             related_nodes=related_nodes or [],
             tags=tags or [],
+            extra=extra_payload,
         )
         self.store.append(record.to_dict())
         self._update_index(record)
         return record
+
+    def create_from_payload(
+        self, payload: dict[str, Any], *, now: dt.datetime | None = None
+    ) -> GraphNodeRecord:
+        node_type = payload.get("node_type") or payload.get("type")
+        if not node_type:
+            raise ValueError("Graph payload missing node_type")
+        title = payload.get("title")
+        if not title:
+            raise ValueError("Graph payload missing title")
+        content = payload.get("content")
+        validation_plan = payload.get("validation_plan")
+        related_nodes = payload.get("related_nodes")
+        tags = payload.get("tags")
+        extra = {
+            key: value
+            for key, value in payload.items()
+            if key
+            not in {
+                "node_type",
+                "type",
+                "title",
+                "content",
+                "validation_plan",
+                "related_nodes",
+                "tags",
+                "id",
+                "status",
+                "created_at",
+                "updated_at",
+            }
+        }
+        return self.create(
+            node_type=node_type,
+            title=title,
+            content=content,
+            validation_plan=validation_plan,
+            related_nodes=related_nodes,
+            tags=tags,
+            extra=extra,
+            now=now,
+        )
 
     def list(self) -> list[dict[str, Any]]:
         return list(self._read_index().values())
@@ -123,3 +174,17 @@ class GraphStore:
         index = self._read_index()
         index[record.id] = record.to_dict()
         self._write_index(index)
+
+
+def _validate_newsletter_extra(extra: dict[str, Any]) -> None:
+    source_ref = extra.get("source_ref")
+    if not isinstance(source_ref, dict):
+        return
+    if source_ref.get("source_type") != "pm_newsletter":
+        return
+    payload = {
+        "node_type": "hypothesis",
+        "title": extra.get("hypothesis_statement") or extra.get("core_claim") or "Newsletter hypothesis",
+        **extra,
+    }
+    validate_newsletter_hypothesis_payload(payload)

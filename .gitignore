@@ -17,3 +17,10 @@ pytest-cache-files-*/
 .pytest_cache/
 __pycache__/
 *.py[cod]
+
+# local runtime / scratch
+scratch/
+_pytest_tmp/
+.pytest_cache/
+__pycache__/
+*.pyc

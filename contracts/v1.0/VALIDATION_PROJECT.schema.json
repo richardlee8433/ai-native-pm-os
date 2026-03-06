@@ -10,6 +10,37 @@
     "title": { "type": "string" },
     "description": { "type": "string" },
     "linked_graph_nodes": { "type": "array", "items": { "type": "string" } },
-    "linked_evidence_packs": { "type": "array", "items": { "type": "string" } }
+    "linked_evidence_packs": { "type": "array", "items": { "type": "string" } },
+    "validation_plan": {
+      "type": "object",
+      "properties": {
+        "claim": { "type": "string" },
+        "chosen_implementation_option": {
+          "type": "object",
+          "properties": {
+            "option_id": { "type": "string" },
+            "label": { "type": "string" },
+            "summary": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "experiment_design": { "type": "string" },
+        "timebox_days": { "type": "integer", "minimum": 1 },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" }
+            },
+            "required": ["name"]
+          }
+        },
+        "success_criteria": { "type": "array", "items": { "type": "string" } },
+        "risks": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
   }
 }

@@ -21,6 +21,7 @@ EXPECTED_SCHEMAS = {
     "RTI_PROPOSAL.schema.json",
     "LPL_POST.schema.json",
     "ECHO_METRICS.schema.json",
+    "PROMOTION_REPORT.schema.json",
 }
 
 

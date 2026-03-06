@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "promotion_id",
+    "vp_id",
+    "source_graph_nodes",
+    "validation_summary",
+    "validation_result",
+    "confidence_level",
+    "promotion_decision",
+    "timestamp"
+  ],
+  "properties": {
+    "promotion_id": { "type": "string", "pattern": "^PR-[0-9]{4}-[0-9]{3}$" },
+    "vp_id": { "type": "string", "pattern": "^VP-[0-9]{4}-[0-9]{3}$" },
+    "source_graph_nodes": { "type": "array", "items": { "type": "string" } },
+    "validation_summary": {
+      "type": "object",
+      "properties": {
+        "claim": { "type": "string" },
+        "experiment_design": { "type": "string" },
+        "evidence_packs": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["claim", "experiment_design", "evidence_packs"]
+    },
+    "validation_result": {
+      "type": "object",
+      "properties": {
+        "metrics_evaluated": { "type": "array", "items": { "type": "string" } },
+        "evidence_outcome": { "type": "string" },
+        "evidence_packs": { "type": "array", "items": { "type": "string" } },
+        "aggregated_outcome": { "type": "string" },
+        "packs_evaluated": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["metrics_evaluated", "evidence_outcome"]
+    },
+    "confidence_level": { "type": "string", "enum": ["low", "medium", "high"] },
+    "promotion_decision": {
+      "type": "string",
+      "enum": ["provisional_lti", "reject", "needs_more_validation"]
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "evidence_count": { "type": "integer", "minimum": 0 },
+    "validation_plan_metrics_defined": { "type": "boolean" },
+    "validation_plan_success_defined": { "type": "boolean" }
+  }
+}

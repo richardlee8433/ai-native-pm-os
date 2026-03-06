@@ -138,6 +138,27 @@ class AVL_EVIDENCE_PACK(ContractBaseModel):
     updated_at: dt.datetime | None = None
 
 
+class ValidationMetric(ContractBaseModel):
+    name: str
+    type: str | None = None
+
+
+class ValidationPlanOption(ContractBaseModel):
+    option_id: str | None = None
+    label: str | None = None
+    summary: str | None = None
+
+
+class ValidationPlan(ContractBaseModel):
+    claim: str | None = None
+    chosen_implementation_option: ValidationPlanOption | None = None
+    experiment_design: str | None = None
+    timebox_days: int | None = Field(default=None, ge=1)
+    metrics: list[ValidationMetric] | None = None
+    success_criteria: list[str] | None = None
+    risks: list[str] | None = None
+
+
 class VALIDATION_PROJECT(ContractBaseModel):
     id: str = Field(pattern=r"^VP-[0-9]{4}-[0-9]{3}$")
     status: Literal["planned", "active", "blocked", "completed", "archived"]
@@ -147,6 +168,7 @@ class VALIDATION_PROJECT(ContractBaseModel):
     description: str | None = None
     linked_graph_nodes: list[str] | None = None
     linked_evidence_packs: list[str] | None = None
+    validation_plan: ValidationPlan | None = None
 
 
 class EvidenceRef(ContractBaseModel):
@@ -260,6 +282,34 @@ class ECHO_METRICS(ContractBaseModel):
     composite_echo_score: float | None = Field(default=None, ge=0, le=1)
 
 
+class PromotionValidationSummary(ContractBaseModel):
+    claim: str
+    experiment_design: str
+    evidence_packs: list[str]
+
+
+class PromotionValidationResult(ContractBaseModel):
+    metrics_evaluated: list[str]
+    evidence_outcome: str
+    evidence_packs: list[str] | None = None
+    aggregated_outcome: str | None = None
+    packs_evaluated: int | None = None
+
+
+class PROMOTION_REPORT(ContractBaseModel):
+    promotion_id: str = Field(pattern=r"^PR-[0-9]{4}-[0-9]{3}$")
+    vp_id: str = Field(pattern=r"^VP-[0-9]{4}-[0-9]{3}$")
+    source_graph_nodes: list[str]
+    validation_summary: PromotionValidationSummary
+    validation_result: PromotionValidationResult
+    confidence_level: Literal["low", "medium", "high"]
+    promotion_decision: Literal["provisional_lti", "reject", "needs_more_validation"]
+    timestamp: dt.datetime
+    evidence_count: int | None = None
+    validation_plan_metrics_defined: bool | None = None
+    validation_plan_success_defined: bool | None = None
+
+
 CONTRACT_MODEL_MAP: dict[str, type[ContractBaseModel]] = {
     "SIGNAL": SIGNAL,
     "ACTION_TASK": ACTION_TASK,
@@ -275,6 +325,7 @@ CONTRACT_MODEL_MAP: dict[str, type[ContractBaseModel]] = {
     "RTI_PROPOSAL": RTI_PROPOSAL,
     "LPL_POST": LPL_POST,
     "ECHO_METRICS": ECHO_METRICS,
+    "PROMOTION_REPORT": PROMOTION_REPORT,
 }
 
 

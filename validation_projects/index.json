@@ -1,0 +1,46 @@
+{
+  "items": [
+    {
+      "id": "VP-2026-001",
+      "status": "planned",
+      "title": "ManualTest VP 001",
+      "created_at": "2026-02-25T10:13:18Z",
+      "updated_at": "2026-02-25T10:14:37Z",
+      "path": "validation_projects/VP-2026-001",
+      "linked_graph_nodes": [
+        "GRAPH-PLAYBOOK-20260225-001"
+      ],
+      "linked_evidence_packs": [
+        "AVL-EP-20260225-001"
+      ]
+    },
+    {
+      "id": "VP-2026-002",
+      "status": "planned",
+      "title": "Agentized Build Loop Efficiency (VP-2026-002)",
+      "created_at": "2026-02-25T15:27:45Z",
+      "updated_at": "2026-02-25T15:31:55Z",
+      "path": "validation_projects/VP-2026-002",
+      "linked_graph_nodes": [
+        "GRAPH-HYPOTHESIS-20260225-001"
+      ],
+      "linked_evidence_packs": [
+        "AVL-EP-20260225-002"
+      ]
+    },
+    {
+      "id": "VP-2026-003",
+      "status": "planned",
+      "title": "Agent Onboarding + Decision File Validation (VP-2026-003)",
+      "created_at": "2026-02-25T23:03:49Z",
+      "updated_at": "2026-02-25T23:10:28Z",
+      "path": "validation_projects/VP-2026-003",
+      "linked_graph_nodes": [
+        "GRAPH-HYPOTHESIS-20260225-001"
+      ],
+      "linked_evidence_packs": [
+        "AVL-EP-20260225-003"
+      ]
+    }
+  ]
+}
