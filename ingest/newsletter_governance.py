@@ -24,6 +24,7 @@ class NewsletterDecision:
     credibility: str | None
     content_id: str | None
     content_title: str | None
+    source_insight: str | None
     core_claim: str | None
     hypothesis_statement: str | None
     routing_decision: str
@@ -45,6 +46,7 @@ class NewsletterDecision:
             "credibility": self.credibility,
             "content_id": self.content_id,
             "content_title": self.content_title,
+            "source_insight": self.source_insight,
             "core_claim": self.core_claim,
             "hypothesis_statement": self.hypothesis_statement,
             "routing_decision": self.routing_decision,
@@ -102,7 +104,8 @@ def select_weekly_items(items: list[dict[str, Any]], now_dt: dt.datetime) -> lis
 def _route_item(source_cfg: SourceConfig, item: dict[str, Any], root: Path, now_dt: dt.datetime) -> NewsletterDecision:
     title = item.get("title")
     content = item.get("content")
-    core_claim = _derive_core_claim(title, content)
+    source_insight = _extract_source_insight(title, content)
+    core_claim = _derive_core_claim(source_insight, title, content)
     hypothesis_statement = _derive_hypothesis_statement(core_claim)
     content_id = _extract_content_id(item)
     decision, justification = classify_newsletter_item(title, content)
@@ -114,7 +117,7 @@ def _route_item(source_cfg: SourceConfig, item: dict[str, Any], root: Path, now_
     seven_day_validation_idea: str | None = None
     implementation_options: list[dict[str, Any]] = []
     if decision == "buildable":
-        idea, options, validation_plan = build_validation_idea(title, content)
+        idea, options, validation_plan = build_validation_idea(core_claim, hypothesis_statement, content)
         seven_day_validation_idea = idea
         implementation_options = _build_implementation_options(options)
         graph_id = _create_graph_hypothesis(
@@ -153,6 +156,7 @@ def _route_item(source_cfg: SourceConfig, item: dict[str, Any], root: Path, now_
         credibility=source_cfg.credibility,
         content_id=content_id,
         content_title=title,
+        source_insight=source_insight,
         core_claim=core_claim,
         hypothesis_statement=hypothesis_statement,
         routing_decision=decision,
@@ -179,16 +183,20 @@ def classify_newsletter_item(title: str | None, content: str | None) -> tuple[st
     return "research", "No 7-day buildable or structural governance signals detected"
 
 
-def build_validation_idea(title: str | None, content: str | None) -> tuple[str, list[str], str]:
-    base = title or "Newsletter insight"
-    idea = f"7-Day Validation Idea: {base}"
+def build_validation_idea(
+    core_claim: str | None,
+    hypothesis_statement: str | None,
+    content: str | None,
+) -> tuple[str, list[str], str]:
+    base = core_claim or hypothesis_statement or "Newsletter insight"
+    idea = _build_claim_aware_idea(base)
     options = [
-        "Build an MVP workflow experiment and measure outcome within 7 days",
-        "Run a decision replay with canonical cases and compare outcomes",
-        "Implement a small system build iteration and collect evidence",
+        _claim_option_a(base),
+        _claim_option_b(base),
+        _claim_option_c(base),
     ]
     validation_plan = "system_build"
-    text = f"{title or ''} {content or ''}".lower()
+    text = f"{base or ''} {content or ''}".lower()
     if re.search(r"decision|escalation|policy", text):
         validation_plan = "decision_engine"
     return idea, options, validation_plan
@@ -272,20 +280,36 @@ def build_newsletter_graph_payload(
     return payload
 
 
-def _derive_core_claim(title: str | None, content: str | None) -> str:
-    if title and title.strip():
-        return title.strip()
+def _extract_source_insight(title: str | None, content: str | None) -> str | None:
+    text = (content or "").strip()
+    if not text:
+        return title.strip() if title else None
+    sentences = _split_sentences(text)
+    if not sentences:
+        return text
+    insight = sentences[0]
+    if len(sentences) > 1 and len(insight.split()) < 12:
+        insight = f"{insight} {sentences[1]}"
+    return insight.strip()
+
+
+def _derive_core_claim(source_insight: str | None, title: str | None, content: str | None) -> str:
+    if source_insight and source_insight.strip():
+        return source_insight.strip()
     if content and content.strip():
         snippet = content.strip().splitlines()[0]
         return snippet.strip()
+    if title and title.strip():
+        return title.strip()
     return "Newsletter insight"
 
 
 def _derive_hypothesis_statement(core_claim: str | None) -> str:
     claim = (core_claim or "").strip()
     if not claim:
-        return "Validate whether the newsletter insight is testable"
-    return f"Validate whether: {claim}"
+        return "If we apply the claim, we expect a measurable improvement within a short validation cycle."
+    intervention, outcome = _split_intervention_outcome(claim)
+    return f"If we apply {intervention}, we expect {outcome} within a short validation cycle."
 
 
 def _extract_content_id(item: dict[str, Any]) -> str | None:
@@ -320,6 +344,41 @@ def _concise_text(text: str | None, *, max_words: int = 8) -> str | None:
     if not words:
         return None
     return " ".join(words[:max_words])
+
+
+def _split_sentences(text: str) -> list[str]:
+    parts = re.split(r"[.!?]+\\s+", text.strip())
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _split_intervention_outcome(claim: str) -> tuple[str, str]:
+    lowered = claim.lower()
+    for token in (" by ", " through ", " via ", " using "):
+        if token in lowered:
+            idx = lowered.index(token)
+            outcome = claim[:idx].strip().rstrip(",")
+            intervention = claim[idx + len(token) :].strip().rstrip(".")
+            return intervention, outcome
+    return "the approach described in the claim", claim.strip().rstrip(".")
+
+
+def _build_claim_aware_idea(claim: str) -> str:
+    intervention, outcome = _split_intervention_outcome(claim)
+    return f"Run a 7-day experiment applying {intervention} to test whether {outcome.lower()}."
+
+
+def _claim_option_a(claim: str) -> str:
+    intervention, _ = _split_intervention_outcome(claim)
+    return f"Introduce {intervention} in a single workflow and track impact for 7 days"
+
+
+def _claim_option_b(claim: str) -> str:
+    _, outcome = _split_intervention_outcome(claim)
+    return f"Run a rapid iteration cadence and measure whether {outcome.lower()}"
+
+
+def _claim_option_c(claim: str) -> str:
+    return f"Define a lightweight metric tied to the claim and collect evidence daily"
 
 
 def _append_watchlist(root: Path, title: str | None, url: str | None, justification: str, timestamp: str) -> str:

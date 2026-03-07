@@ -74,11 +74,11 @@ def test_newsletter_graph_persistence_roundtrip(tmp_path) -> None:
     assert graph is not None
     assert graph["source_ref"]["source_url"] == "https://example.com/post"
     assert graph["source_ref"]["source_type"] == "pm_newsletter"
-    assert graph["core_claim"] == "Prototype a new PM workflow"
-    assert graph["hypothesis_statement"].startswith("Validate whether:")
+    assert graph["core_claim"] == "Build an MVP workflow experiment"
+    assert graph["hypothesis_statement"].startswith("If we apply")
     assert graph["routing_decision"] == "buildable"
     assert graph["justification"]
-    assert graph["validation_seed"]["seven_day_validation_idea"].startswith("7-Day Validation Idea")
+    assert graph["validation_seed"]["seven_day_validation_idea"].startswith("Run a 7-day experiment")
     assert graph["validation_seed"]["implementation_options"]
 
 

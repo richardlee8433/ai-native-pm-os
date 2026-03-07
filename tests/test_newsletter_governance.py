@@ -41,15 +41,15 @@ def test_buildable_creates_graph_and_options(tmp_path) -> None:
     assert payload["processed"] == 1
     decision = payload["decisions"][0]
     assert decision["routing_decision"] == "buildable"
-    assert decision["idea"].startswith("7-Day Validation Idea")
+    assert decision["idea"].startswith("Run a 7-day experiment")
     assert 2 <= len(decision["options"]) <= 3
     assert decision["source_url"] == "https://example.com/post"
     assert decision["source_type"] == "pm_newsletter"
     assert decision["justification"]
     assert decision["timestamp"]
-    assert decision["core_claim"] == "Prototype a new PM workflow"
-    assert decision["hypothesis_statement"].startswith("Validate whether:")
-    assert decision["seven_day_validation_idea"].startswith("7-Day Validation Idea")
+    assert decision["core_claim"] == "Build an MVP workflow experiment"
+    assert decision["hypothesis_statement"].startswith("If we apply")
+    assert decision["seven_day_validation_idea"].startswith("Run a 7-day experiment")
     assert decision["implementation_options"]
     assert decision["content_id"]
 

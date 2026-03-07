@@ -23,6 +23,7 @@
   - v4.1 Promotion Governance (Promotion Report) 已完成。
   - VP Validation Plan + vp_plan.md 已完成。
   - Newsletter → Graph writeback 已完成，Graph hypothesis 可保存 validation seed。
+  - v4.1.1 Graph Insight Extractor 已完成，Graph nodes 會從 article insights 產生 claim 與 validation idea。
   - 目前完成模組：Graph Hypothesis / Newsletter Governance / VP Validation Plan / AVL Evidence / Promotion Governance / LTI Generation。
   - 未完成模組：Research Program Queue / RTI Knowledge Accumulation。
 
@@ -133,3 +134,5 @@ Promotion Report：
 - [2026-03-06] Promotion report 必須作為 promotion governance artifact（JSON + Markdown），用於 machine validation 與 human governance review。
 - [2026-03-06] Evidence aggregation 必須支援 multi-pack validation，promotion decision 應基於 aggregated outcome 而非單一 evidence pack。
 - [2026-03-06] External knowledge 不得直接 promotion 為 LTI，必須經過 Graph hypothesis → VP validation → AVL evidence → Promotion governance。
+- [2026-03-07] Graph nodes must derive claims from article insights rather than titles, otherwise validation plans collapse into generic templates.
+- [2026-03-07] Validation ideas must be claim-aware to preserve the connection between external knowledge and experiment design.
