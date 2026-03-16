@@ -25,6 +25,8 @@
     "recommendation": { "type": "string", "enum": ["promote", "revise", "archive"] },
     "governance_impact": { "type": "string", "enum": ["none", "review", "triggers"] },
     "created_at": { "type": "string", "format": "date-time" },
-    "updated_at": { "type": "string", "format": "date-time" }
+    "updated_at": { "type": "string", "format": "date-time" },
+    "claim_reference": { "type": "string" },
+    "claim_graph_node": { "type": "string" }
   }
 }

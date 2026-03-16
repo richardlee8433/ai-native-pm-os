@@ -22,6 +22,10 @@ EXPECTED_SCHEMAS = {
     "LPL_POST.schema.json",
     "ECHO_METRICS.schema.json",
     "PROMOTION_REPORT.schema.json",
+    "CLAIM_OBJECT.schema.json",
+    "CLAIM_EDGE.schema.json",
+    "PATTERN_CANDIDATE.schema.json",
+    "PRINCIPLE_CANDIDATE.schema.json",
 }
 
 

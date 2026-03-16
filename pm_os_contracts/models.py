@@ -108,6 +108,7 @@ class LTI_NODE(ContractBaseModel):
     revalidate_status: Literal["pending", "complete", "overdue", "n/a"] | None = None
     source_graph_nodes: list[str] | None = None
     validation_evidence_packs: list[str] | None = None
+    knowledge_type: Literal["claim", "pattern", "principle", "decision_rule", "evaluation_standard"] | None = None
 
 
 class GRAPH_NODE(ContractBaseModel):
@@ -136,6 +137,53 @@ class AVL_EVIDENCE_PACK(ContractBaseModel):
     governance_impact: Literal["none", "review", "triggers"]
     created_at: dt.datetime | None = None
     updated_at: dt.datetime | None = None
+    claim_reference: str | None = None
+    claim_graph_node: str | None = None
+
+
+class ClaimObject(ContractBaseModel):
+    claim_id: str = Field(pattern=r"^CLM-[A-F0-9]{16}$")
+    claim_statement: str
+    source_id: str
+    source_type: str
+    source_url: str | None = None
+    domain: str | None = None
+    context: str | None = None
+    metric: str | None = None
+    evidence_type: str | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    assumptions: list[str] | None = None
+    failure_modes: list[str] | None = None
+    applicability: str | None = None
+    rule_candidate: str | None = None
+    extracted_at: dt.datetime
+    version: str
+
+
+class ClaimEdge(ContractBaseModel):
+    edge_id: str = Field(pattern=r"^CEDGE-[A-F0-9]{16}$")
+    from_claim_id: str = Field(pattern=r"^CLM-[A-F0-9]{16}$")
+    to_claim_id: str = Field(pattern=r"^CLM-[A-F0-9]{16}$")
+    relation_type: Literal["supports", "contradicts", "refines", "applies_to", "derived_from"]
+    created_at: dt.datetime
+    version: str
+
+
+class PatternCandidate(ContractBaseModel):
+    pattern_id: str = Field(pattern=r"^PAT-[A-F0-9]{16}$")
+    title: str
+    summary: str | None = None
+    source_claim_ids: list[str]
+    created_at: dt.datetime
+    version: str
+
+
+class PrincipleCandidate(ContractBaseModel):
+    principle_id: str = Field(pattern=r"^PRIN-[A-F0-9]{16}$")
+    statement: str
+    source_claim_ids: list[str]
+    created_at: dt.datetime
+    version: str
 
 
 class ValidationMetric(ContractBaseModel):
@@ -326,6 +374,10 @@ CONTRACT_MODEL_MAP: dict[str, type[ContractBaseModel]] = {
     "LPL_POST": LPL_POST,
     "ECHO_METRICS": ECHO_METRICS,
     "PROMOTION_REPORT": PROMOTION_REPORT,
+    "CLAIM_OBJECT": ClaimObject,
+    "CLAIM_EDGE": ClaimEdge,
+    "PATTERN_CANDIDATE": PatternCandidate,
+    "PRINCIPLE_CANDIDATE": PrincipleCandidate,
 }
 
 

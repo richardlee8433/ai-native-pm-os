@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "edge_id",
+    "from_claim_id",
+    "to_claim_id",
+    "relation_type",
+    "created_at",
+    "version"
+  ],
+  "properties": {
+    "edge_id": { "type": "string", "pattern": "^CEDGE-[A-F0-9]{16}$" },
+    "from_claim_id": { "type": "string", "pattern": "^CLM-[A-F0-9]{16}$" },
+    "to_claim_id": { "type": "string", "pattern": "^CLM-[A-F0-9]{16}$" },
+    "relation_type": {
+      "type": "string",
+      "enum": ["supports", "contradicts", "refines", "applies_to", "derived_from"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "version": { "type": "string", "const": "v5.0" }
+  }
+}

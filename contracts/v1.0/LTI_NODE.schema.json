@@ -46,6 +46,10 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "knowledge_type": {
+      "type": "string",
+      "enum": ["claim", "pattern", "principle", "decision_rule", "evaluation_standard"]
+    },
     "revision_history": {
       "type": "array",
       "items": {

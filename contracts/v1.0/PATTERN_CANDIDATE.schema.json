@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["pattern_id", "title", "source_claim_ids", "created_at", "version"],
+  "properties": {
+    "pattern_id": { "type": "string", "pattern": "^PAT-[A-F0-9]{16}$" },
+    "title": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string" },
+    "source_claim_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^CLM-[A-F0-9]{16}$" }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "version": { "type": "string", "const": "v5.0" }
+  }
+}

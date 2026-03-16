@@ -136,3 +136,38 @@ Promotion Report：
 - [2026-03-06] External knowledge 不得直接 promotion 為 LTI，必須經過 Graph hypothesis → VP validation → AVL evidence → Promotion governance。
 - [2026-03-07] Graph nodes must derive claims from article insights rather than titles, otherwise validation plans collapse into generic templates.
 - [2026-03-07] Validation ideas must be claim-aware to preserve the connection between external knowledge and experiment design.
+## v5.0 Phase 0-1 Status (2026-03-16)
+
+- Added v5.0 claim foundation as an additive layer while preserving the existing v4.1 operational flow.
+- Added canonical claim contracts and schemas:
+  - `CLAIM_OBJECT`
+  - `CLAIM_EDGE`
+  - `PATTERN_CANDIDATE`
+  - `PRINCIPLE_CANDIDATE`
+- Added backward-compatible optional fields:
+  - `AVL_EVIDENCE_PACK.claim_reference`
+  - `AVL_EVIDENCE_PACK.claim_graph_node`
+  - `LTI_NODE.knowledge_type`
+- Added append-only claim persistence under `claims/`.
+- Added v5.0 feature flags:
+  - `PMOS_V5_CLAIMS_ENABLED`
+  - `PMOS_V5_CLAIM_INGEST_ENABLED`
+- Added `pmos claim` CLI namespace with `list`, `show`, and `ingest`.
+- Added deterministic claim ingestion MVP for newsletter and RSS sources.
+- Claim extraction is rule-based and offline-testable; no external LLM dependency is required.
+
+### Completed v5.0 Components
+
+- Claim contracts and JSON schemas
+- Claim store with duplicate-skip behavior by deterministic `claim_id`
+- Newsletter to claim ingestion MVP
+- RSS to claim ingestion MVP
+- Claim review CLI
+
+### Open Technical Debt for Phase 2+
+
+- Claim graph node and edge persistence are still minimal; no full relation engine yet.
+- Conflict detection and governance routing are not implemented yet.
+- Pattern and principle distillation remain contract-level stubs only.
+- Promotion still uses v4.1 logic and has not been upgraded to claim-first governance.
+- Validation remains VP and AVL centric; claim and principle targeted validation are not implemented yet.

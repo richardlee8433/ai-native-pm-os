@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from avl.ops import EvidencePackStore
+from claims.flags import claim_ingest_enabled, claims_enabled
+from claims.store import ClaimStore
 from cx_replay.replay_runner import run_fixture
 from graph.ops import GraphStore
 from revalidation.queue import write_queue_report
@@ -83,6 +85,17 @@ def build_parser() -> argparse.ArgumentParser:
     cx_replay_sub = cx_replay.add_subparsers(dest="replay_command", required=True)
     cx_run = cx_replay_sub.add_parser("run")
     cx_run.add_argument("--fixture", required=True, help="Fixture id (filename without extension)")
+
+    claim_parser = subparsers.add_parser("claim")
+    claim_sub = claim_parser.add_subparsers(dest="claim_command", required=True)
+    claim_list = claim_sub.add_parser("list")
+    claim_show = claim_sub.add_parser("show")
+    claim_show.add_argument("claim_id")
+    claim_ingest = claim_sub.add_parser("ingest")
+    claim_ingest.add_argument("source_ref")
+    claim_ingest.add_argument("--sources-path", default="ingest/sources.yaml")
+    claim_ingest.add_argument("--type", choices=["newsletter", "rss"])
+    claim_ingest.add_argument("--limit", type=int, default=5)
 
     return parser
 
@@ -295,6 +308,40 @@ def main(argv: list[str] | None = None) -> int:
             result = run_fixture(fixture_id=args.fixture, root=root)
             print(json.dumps(result))
             return 0
+
+    if args.command == "claim":
+        store = ClaimStore(root)
+        if args.claim_command == "list":
+            if not claims_enabled():
+                print(json.dumps({"ok": False, "reason": "PMOS_V5_CLAIMS_ENABLED is not enabled"}))
+                return 2
+            print(json.dumps(store.list()))
+            return 0
+        if args.claim_command == "show":
+            if not claims_enabled():
+                print(json.dumps({"ok": False, "reason": "PMOS_V5_CLAIMS_ENABLED is not enabled"}))
+                return 2
+            claim = store.get(args.claim_id)
+            if not claim:
+                print(json.dumps({"ok": False, "reason": f"Claim not found: {args.claim_id}"}))
+                return 2
+            print(json.dumps(claim))
+            return 0
+        if args.claim_command == "ingest":
+            if not claim_ingest_enabled():
+                print(json.dumps({"ok": False, "reason": "PMOS_V5_CLAIM_INGEST_ENABLED is not enabled"}))
+                return 2
+            from ingest.claim_pipeline import ingest_claims_for_source
+
+            result = ingest_claims_for_source(
+                root=root,
+                source_id=args.source_ref,
+                source_type=args.type,
+                sources_path=root / args.sources_path,
+                limit=args.limit,
+            )
+            print(json.dumps(result))
+            return 0 if result.get("ok") else 2
 
     parser.error("Unknown command")
     return 2
