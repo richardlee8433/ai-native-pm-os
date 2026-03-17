@@ -16,3 +16,7 @@ def claims_enabled() -> bool:
 
 def claim_ingest_enabled() -> bool:
     return _flag_enabled("PMOS_V5_CLAIM_INGEST_ENABLED", default=False)
+
+
+def claim_graph_enabled() -> bool:
+    return _flag_enabled("PMOS_V5_CLAIM_GRAPH_ENABLED", default=False)

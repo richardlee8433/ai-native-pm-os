@@ -164,7 +164,15 @@ class ClaimEdge(ContractBaseModel):
     edge_id: str = Field(pattern=r"^CEDGE-[A-F0-9]{16}$")
     from_claim_id: str = Field(pattern=r"^CLM-[A-F0-9]{16}$")
     to_claim_id: str = Field(pattern=r"^CLM-[A-F0-9]{16}$")
-    relation_type: Literal["supports", "contradicts", "refines", "applies_to", "derived_from"]
+    relation_type: Literal[
+        "supports",
+        "contradicts",
+        "refines",
+        "applies_to",
+        "derived_from",
+        "measured_by",
+        "exposed_to",
+    ]
     created_at: dt.datetime
     version: str
 

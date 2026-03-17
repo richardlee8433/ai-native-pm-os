@@ -15,7 +15,15 @@
     "to_claim_id": { "type": "string", "pattern": "^CLM-[A-F0-9]{16}$" },
     "relation_type": {
       "type": "string",
-      "enum": ["supports", "contradicts", "refines", "applies_to", "derived_from"]
+      "enum": [
+        "supports",
+        "contradicts",
+        "refines",
+        "applies_to",
+        "derived_from",
+        "measured_by",
+        "exposed_to"
+      ]
     },
     "created_at": { "type": "string", "format": "date-time" },
     "version": { "type": "string", "const": "v5.0" }

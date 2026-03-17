@@ -171,3 +171,43 @@ Promotion Report：
 - Pattern and principle distillation remain contract-level stubs only.
 - Promotion still uses v4.1 logic and has not been upgraded to claim-first governance.
 - Validation remains VP and AVL centric; claim and principle targeted validation are not implemented yet.
+
+## v5.0 Phase 2 Status (2026-03-17)
+
+- Added a claim graph persistence MVP as an additive layer under `graph/claim_*` without changing the existing v4.1 `GraphStore`.
+- Added `PMOS_V5_CLAIM_GRAPH_ENABLED` so claim graph behavior stays opt-in and Phase 1 ingestion remains backward-compatible by default.
+- Added deterministic claim graph node persistence for:
+  - `claim`
+  - `context`
+  - `metric`
+  - `failure_mode`
+  - `evidence`
+- Added deterministic relation persistence for:
+  - `applies_to`
+  - `derived_from`
+  - `supports`
+  - `contradicts`
+  - `measured_by`
+  - `exposed_to`
+- Added claim graph Python helpers and CLI surface:
+  - `persist_claim_to_graph`
+  - `get_claim_graph_node`
+  - `list_claim_neighbors`
+  - `pmos claim graph show`
+  - `pmos claim graph neighbors`
+  - `pmos claim graph persist`
+  - `pmos claim graph sync`
+- Added a forward adapter stub from legacy hypothesis records to claim-shaped data for future migration work.
+
+### Phase 2 Technical Debt and Next Steps
+
+- Phase 3 should build conflict scans on top of the current typed relations rather than introducing a new storage shape.
+- `supports` and `contradicts` are persistence-ready but still need explicit detection and governance routing logic.
+- Evidence linkage currently centers on source provenance; future work should expand to claim-level evidence conflict hooks and richer evidence refs.
+- Metric and failure-mode relations are stored as `measured_by` and `exposed_to`; future relation expansion should keep these aliases stable or document migrations.
+
+### Phase 2 Compounding Lessons
+
+- [2026-03-17] Claim graph storage should remain parallel to the legacy graph store until claim-aware promotion exists end to end; rewriting `GraphStore` too early would risk breaking v4.1 operations.
+- [2026-03-17] Deterministic node IDs alone are not enough for idempotence in append-only storage; upsert logic must compare semantic payloads without timestamp noise.
+- [2026-03-17] Phase 1 claim ingestion must keep graph writeback optional, otherwise a new v5.0 dependency leaks into the stable claim foundation path.

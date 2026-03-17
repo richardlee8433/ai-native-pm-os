@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from avl.ops import EvidencePackStore
-from claims.flags import claim_ingest_enabled, claims_enabled
+from claims.flags import claim_graph_enabled, claim_ingest_enabled, claims_enabled
 from claims.store import ClaimStore
 from cx_replay.replay_runner import run_fixture
+from graph.claim_ops import get_claim_graph_node, list_claim_neighbors, persist_all_claims_to_graph, persist_claim_to_graph
 from graph.ops import GraphStore
 from revalidation.queue import write_queue_report
 from promotion.report_generator import generate_promotion_report
@@ -96,6 +97,19 @@ def build_parser() -> argparse.ArgumentParser:
     claim_ingest.add_argument("--sources-path", default="ingest/sources.yaml")
     claim_ingest.add_argument("--type", choices=["newsletter", "rss"])
     claim_ingest.add_argument("--limit", type=int, default=5)
+    claim_ingest.add_argument("--persist-graph", action="store_true")
+
+    claim_graph = claim_sub.add_parser("graph")
+    claim_graph_sub = claim_graph.add_subparsers(dest="claim_graph_command", required=True)
+    claim_graph_show = claim_graph_sub.add_parser("show")
+    claim_graph_show.add_argument("claim_id")
+    claim_graph_neighbors = claim_graph_sub.add_parser("neighbors")
+    claim_graph_neighbors.add_argument("claim_id")
+    claim_graph_neighbors.add_argument("--relation-type")
+    claim_graph_persist = claim_graph_sub.add_parser("persist")
+    claim_graph_persist.add_argument("claim_id")
+    claim_graph_sync = claim_graph_sub.add_parser("sync")
+    claim_graph_sync.add_argument("--claim-id", action="append", default=[])
 
     return parser
 
@@ -331,6 +345,9 @@ def main(argv: list[str] | None = None) -> int:
             if not claim_ingest_enabled():
                 print(json.dumps({"ok": False, "reason": "PMOS_V5_CLAIM_INGEST_ENABLED is not enabled"}))
                 return 2
+            if args.persist_graph and not claim_graph_enabled():
+                print(json.dumps({"ok": False, "reason": "PMOS_V5_CLAIM_GRAPH_ENABLED is not enabled"}))
+                return 2
             from ingest.claim_pipeline import ingest_claims_for_source
 
             result = ingest_claims_for_source(
@@ -339,9 +356,66 @@ def main(argv: list[str] | None = None) -> int:
                 source_type=args.type,
                 sources_path=root / args.sources_path,
                 limit=args.limit,
+                persist_graph=args.persist_graph,
             )
             print(json.dumps(result))
             return 0 if result.get("ok") else 2
+        if args.claim_command == "graph":
+            if not claim_graph_enabled():
+                print(json.dumps({"ok": False, "reason": "PMOS_V5_CLAIM_GRAPH_ENABLED is not enabled"}))
+                return 2
+            if args.claim_graph_command == "show":
+                node = get_claim_graph_node(root=root, claim_id=args.claim_id)
+                payload = {
+                    "ok": node is not None,
+                    "claim_id": args.claim_id,
+                    "exists": node is not None,
+                    "node": node,
+                }
+                if node is None:
+                    payload["reason"] = f"Claim graph node not found: {args.claim_id}"
+                    print(json.dumps(payload))
+                    return 2
+                print(json.dumps(payload))
+                return 0
+            if args.claim_graph_command == "neighbors":
+                node = get_claim_graph_node(root=root, claim_id=args.claim_id)
+                if node is None:
+                    print(
+                        json.dumps(
+                            {
+                                "ok": False,
+                                "claim_id": args.claim_id,
+                                "reason": f"Claim graph node not found: {args.claim_id}",
+                            }
+                        )
+                    )
+                    return 2
+                print(
+                    json.dumps(
+                        {
+                            "ok": True,
+                            "claim_id": args.claim_id,
+                            "node": node,
+                            "neighbors": list_claim_neighbors(
+                                root=root,
+                                claim_id=args.claim_id,
+                                relation_type=args.relation_type,
+                            ),
+                        }
+                    )
+                )
+                return 0
+            if args.claim_graph_command == "persist":
+                claim = ClaimStore(root).get(args.claim_id)
+                if not claim:
+                    print(json.dumps({"ok": False, "reason": f"Claim not found: {args.claim_id}"}))
+                    return 2
+                print(json.dumps({"ok": True, **persist_claim_to_graph(root=root, claim=claim)}))
+                return 0
+            if args.claim_graph_command == "sync":
+                print(json.dumps({"ok": True, **persist_all_claims_to_graph(root=root, claim_ids=args.claim_id or None)}))
+                return 0
 
     parser.error("Unknown command")
     return 2
